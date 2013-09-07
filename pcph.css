@@ -5,9 +5,12 @@ body {
     margin-right: auto;
 }
 
+.cover {
+    float: left;
+}
+
 img#cover {
     width: 300px;
-    float: left;
 }
 
 .booktitle {
