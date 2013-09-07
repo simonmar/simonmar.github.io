@@ -1,0 +1,70 @@
+body {
+    width: 800px;
+    margin-top: 3ex;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+img#cover {
+    width: 300px;
+    float: left;
+}
+
+.booktitle {
+    font-weight: bold;
+    font-size: 120%;
+}
+
+.author {
+    font-style: italic;
+    font-size: 120%;
+}
+
+.description {
+    margin-left: 320px;
+    width: 480px;
+}
+
+.button {
+    font-size: 100%;
+    padding-top: 1ex;
+    padding-right: 1ex;
+    padding-left: 1ex;
+    padding-bottom: 1ex;
+    margin-right: 1em;
+    background-color: #e0e0f0;
+}
+
+.button:hover {
+    background-color: #a0a0f0;
+}
+
+.button > a {
+    text-decoration: none;
+}
+
+.praise {
+    margin-top: 5ex;
+    clear: both;
+}
+
+.praisehead {
+    font-weight: bold;
+    font-size: 120%;
+    margin-bottom: 2ex;
+}
+
+.quote {
+    font-style: italic;
+    color: #606060;
+    margin-left: 0em;
+    margin-right: 7em;
+    margin-bottom: 4ex;
+}
+
+.attribution {
+    margin-top: 1ex;
+    margin-left: 3em;
+    font-style: normal;
+    color: #000000;
+}
