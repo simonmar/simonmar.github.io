@@ -1,8 +1,16 @@
+html {
+    background-color: #d0d0e0;
+}
+
 body {
     width: 800px;
-    margin-top: 3ex;
+    padding-top: 15px;
+    padding-left: 15px;
+    padding-right: 15px;
+    padding-bottom: 15px;
     margin-left: auto;
     margin-right: auto;
+    background-color: #ffffff;
 }
 
 .cover {
