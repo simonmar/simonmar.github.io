@@ -1,0 +1,46 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!--Rendered using the Haskell Html Library v0.2-->
+<HTML
+><HEAD
+><TITLE
+>Abstract : A Semantics for Imprecise Exceptions</TITLE
+></HEAD
+><BODY BGCOLOR="#e0e0e0"
+><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
+><TR
+><TD
+><P
+><B
+>A Semantics for Imprecise Exceptions</B
+> (Simon Peyton Jones, Alastair Reid, Tony Hoare, Simon Marlow, Fergus Henderson) <I
+>Proceedings of the ACM SIGPLAN '99 Conference on Programming Language Design and Implementation</I
+>, pages 25--36, Atlanta, Georgia, May 1999</P
+><P
+>Some modern superscalar microprocessors provide only 
+{\em imprecise exceptions}.
+That is, they do not guarantee to report the same exception that would
+be encountered by a straightforward sequential execution of the program.
+In exchange, they offer increased performance or decreased chip area (which 
+amount to much the same thing).
+</P
+><P
+>This performance/precision tradeoff has not so far been much explored
+at the programming language level.  In this paper we propose a design
+for imprecise exceptions in the lazy functional programming language
+Haskell.  We discuss several designs, and conclude that
+imprecision is essential if the language is still to enjoy its current
+rich algebra of transformations.  We sketch a precise semantics for the
+language extended with exceptions.
+</P
+><P
+>The paper shows how to extend Haskell with exceptions without
+crippling the language or its compilers.  We do not yet have enough
+experience of using the new mechanism to know whether it strikes an
+appropriate balance between expressiveness and performance.
+</P
+></TD
+></TR
+></TABLE
+></BODY
+></HTML
+>

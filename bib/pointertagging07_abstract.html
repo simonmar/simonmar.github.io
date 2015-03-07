@@ -1,0 +1,50 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!--Rendered using the Haskell Html Library v0.2-->
+<HTML
+><HEAD
+><TITLE
+>Abstract : Faster laziness using dynamic pointer tagging</TITLE
+></HEAD
+><BODY BGCOLOR="#e0e0e0"
+><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
+><TR
+><TD
+><P
+><B
+><A HREF="http://community.haskell.org/~simonmar/papers/ptr-tagging.pdf"
+>Faster laziness using dynamic pointer tagging</A
+></B
+> (Simon Marlow, Alexey Rodriguez Yakushev, Simon Peyton Jones) <I
+>ICFP '07: Proceedings of the ACM SIGPLAN international conference on Functional programming</I
+>, Freiburg, Germany, ACM Press, October 2007</P
+><P
+>In the light of evidence that Haskell programs compiled by GHC exhibit
+large numbers of mispredicted branches on modern processors, we
+re-examine the ``tagless'' aspect of the STG-machine that GHC uses as
+its evaluation model.  
+</P
+><P
+>We propose two tagging strategies: a simple strategy called
+semi-tagging that seeks to avoid one common source of unpredictable
+indirect jumps, and a more complex strategy called dynamic
+pointer-tagging that uses the spare low bits in a pointer to encode
+information about the pointed-to object.  Both of these strategies
+have been implemented and exhaustively measured in the context of a
+production compiler, GHC, and the paper contains detailed descriptions
+of the implementations.  Our measurements demonstrate significant
+performance improvements (14\% for dynamic pointer-tagging with only a
+2\% increase in code size), and we further demonstrate that much of the
+improvement can be attributed to the elimination of mispredicted
+branch instructions.
+</P
+><P
+>As part of our investigations we also discovered that one optimisation
+in the STG-machine, vectored-returns, is no longer worthwhile and we
+explain why.
+</P
+></TD
+></TR
+></TABLE
+></BODY
+></HTML
+>

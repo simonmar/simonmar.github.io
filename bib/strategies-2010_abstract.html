@@ -1,0 +1,50 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!--Rendered using the Haskell Html Library v0.2-->
+<HTML
+><HEAD
+><TITLE
+>Abstract : Seq no more: Better Strategies for Parallel {H}askell</TITLE
+></HEAD
+><BODY BGCOLOR="#e0e0e0"
+><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
+><TR
+><TD
+><P
+><B
+><A HREF="http://community.haskell.org/~simonmar/papers/strategies.pdf"
+>Seq no more: Better Strategies for Parallel Haskell</A
+></B
+> (Simon Marlow, Patrick Maier, Hans-Wolfgang Loidl, Mustafa K Aswad, Phil Trinder) <I
+>Haskell '10: Proceedings of the Third ACM SIGPLAN Symposium on Haskell</I
+>, Baltimore, USA, ACM, 2010</P
+><P
+>We present a complete redesign of Evaluation Strategies, a key
+abstraction for specifying pure, deterministic parallelism in Haskell.
+Our new formulation preserves the compositionality and modularity
+benefits of the original, while providing significant new benefits.
+First, we introduce an evaluation-order monad to provide clearer, more
+generic, and more efficient specification of parallel evaluation.
+Secondly, the new formulation resolves a subtle space management issue
+with the original strategies, allowing parallelism (sparks) to be
+preserved while reclaiming heap associated with superfluous
+parallelism.  Related to this, the new formulation provides far better
+support for speculative parallelism as the garbage collector now
+prunes unneeded speculation.  Finally, the new formulation provides
+improved compositionality: we can directly express parallelism
+embedded within lazy data structures, producing more compositional
+strategies, and our basic strategies are parametric in the
+coordination combinator, facilitating a richer set of parallelism
+combinators.
+</P
+><P
+>We give measurements over a range of benchmarks demonstrating that the
+runtime overheads of the new formulation relative to the original are
+low, and the new strategies even yield slightly better speedups on
+average than the original strategies.
+</P
+></TD
+></TR
+></TABLE
+></BODY
+></HTML
+>

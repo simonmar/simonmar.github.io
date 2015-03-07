@@ -1,0 +1,44 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!--Rendered using the Haskell Html Library v0.2-->
+<HTML
+><HEAD
+><TITLE
+>Abstract : Extending the {H}askell Foreign Function Interface with Concurrency</TITLE
+></HEAD
+><BODY BGCOLOR="#e0e0e0"
+><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
+><TR
+><TD
+><P
+><B
+><A HREF="http://community.haskell.org/~simonmar/papers/conc-ffi.pdf"
+>Extending the Haskell Foreign Function Interface with Concurrency</A
+></B
+> (Simon Marlow, Simon Peyton Jones, Wolfgang Thaller) <I
+>Proceedings of the ACM SIGPLAN workshop on Haskell</I
+>, pages 57--68, Snowbird, Utah, USA, September 2004</P
+><P
+>A Haskell system that includes both the Foreign Function Interface and
+the Concurrent Haskell extension must consider how Concurrent Haskell
+threads map to external Operating System threads for the purposes of
+specifying in which thread a foreign call is made.
+</P
+><P
+>Many concurrent languages take the easy route and specify a one-to-one
+correspondence between the language's own threads and external OS
+threads.  However, OS threads tend to be expensive, so this choice can
+limit the performance and scalability of the concurrent language.
+</P
+><P
+>The main contribution of this paper is a language design that provides
+a neat solution to this problem, allowing the implementor of the
+language enough flexibility to provide cheap lightweight threads,
+while still providing the programmer with control over the mapping
+between internal threads and external threads where necessary.
+</P
+></TD
+></TR
+></TABLE
+></BODY
+></HTML
+>

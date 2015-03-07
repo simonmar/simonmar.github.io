@@ -1,0 +1,42 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!--Rendered using the Haskell Html Library v0.2-->
+<HTML
+><HEAD
+><TITLE
+>Abstract : A Lightweight Interactive Debugger for {H}askell</TITLE
+></HEAD
+><BODY BGCOLOR="#e0e0e0"
+><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
+><TR
+><TD
+><P
+><B
+><A HREF="http://community.haskell.org/~simonmar/papers/ghci-debug.pdf"
+>A Lightweight Interactive Debugger for Haskell</A
+></B
+> (Simon Marlow, Jos'e Iborra, Bernard Pope, Andy Gill) Haskell '07: Proceedings of the ACM SIGPLAN workshop on Haskell workshop, pages 13--24, Freiburg, Germany, ACM, June 2007</P
+><P
+>This paper describes the design and construction of a Haskell
+source-level debugger built into the GHCi interactive environment.  We
+have taken a pragmatic approach: the debugger is based on the
+traditional stop-examine-continue model of online debugging, which is
+simple and intuitive, but has traditionally been shunned in the
+context of Haskell because it exposes the lazy evaluation order.  We
+argue that this drawback is not as severe as it may seem, and in some
+cases is an advantage.
+</P
+><P
+>The design focusses on \emph{availability}: our debugger is intended
+to work on all programs that can be compiled with GHC, and without
+requiring the programmer to jump through additional hoops to debug
+their program.  The debugger has a novel approach for reconstructing
+the type of runtime values in a polymorphic context.  Our
+implementation is light on complexity, and was integrated into GHC
+without significant upheaval.
+</P
+></TD
+></TR
+></TABLE
+></BODY
+></HTML
+>

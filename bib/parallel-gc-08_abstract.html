@@ -1,0 +1,35 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!--Rendered using the Haskell Html Library v0.2-->
+<HTML
+><HEAD
+><TITLE
+>Abstract : Parallel Generational-Copying Garbage Collection with a Block-Structured Heap</TITLE
+></HEAD
+><BODY BGCOLOR="#e0e0e0"
+><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
+><TR
+><TD
+><P
+><B
+><A HREF="http://community.haskell.org/~simonmar/papers/parallel-gc.pdf"
+>Parallel Generational-Copying Garbage Collection with a Block-Structured Heap</A
+></B
+> (Simon Marlow, Tim Harris, Roshan P. James, Simon Peyton Jones) <I
+>ISMM '08: Proceedings of the 7th international symposium on Memory management</I
+>, Tucson, Arizona, ACM, June 2008</P
+><P
+>We present a parallel generational-copying garbage collector
+implemented for the Glasgow Haskell Compiler.  We use a
+block-structured memory allocator, which provides a natural
+granularity for dividing the work of GC between many threads, leading
+to a simple yet effective method for parallelising copying GC.  The
+results are encouraging: we demonstrate wall-clock speedups of on
+average a factor of 2 in GC time on a commodity 4-core machine with no
+programmer intervention, compared to our best sequential GC.
+</P
+></TD
+></TR
+></TABLE
+></BODY
+></HTML
+>
