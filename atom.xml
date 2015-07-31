@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <title>Simon Marlow</title>
+    <link href="https://simonmar.github.io/atom.xml" rel="self" />
+    <link href="https://simonmar.github.io" />
+    <id>https://simonmar.github.io/atom.xml</id>
+    <author>
+        <name>Simon Marlow</name>
+        <email>marlowsd@gmail.com</email>
+    </author>
+    <updated>2015-07-28T00:00:00Z</updated>
+    <entry>
+    <title>Optimising Garbage Collection Overhead in Sigma</title>
+    <link href="https://simonmar.github.io/posts/2015-07-28-optimising-garbage-collection-overhead-in-sigma.html" />
+    <id>https://simonmar.github.io/posts/2015-07-28-optimising-garbage-collection-overhead-in-sigma.html</id>
+    <published>2015-07-28T00:00:00Z</published>
+    <updated>2015-07-28T00:00:00Z</updated>
+    <summary type="html"><![CDATA[""]]></summary>
+</entry>
+
+</feed>
