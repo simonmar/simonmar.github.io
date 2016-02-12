@@ -213,7 +213,7 @@ CallStack (from -prof):
 </ul>
 <p>But:</p>
 <ul>
-<li>Requires explicit code changes to propagate the stack Has</li>
+<li>Requires explicit code changes to propagate the stack</li>
 <li>Some runtime overhead (stacks get constructed and passed around at runtime)</li>
 <li>Shows up in types as <code>HasCallStack</code> constraints</li>
 <li>Lexical, not dynamic. (In <code>g = map f</code>, <code>g</code> calls <code>f</code> rather than <code>map</code> calling <code>f</code>)</li>
