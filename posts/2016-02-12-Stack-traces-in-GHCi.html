@@ -218,7 +218,7 @@ CallStack (from -prof):
 <li>Shows up in types as <code>HasCallStack</code> constraints</li>
 <li>Lexical, not dynamic. (In <code>g = map f</code>, <code>g</code> calls <code>f</code> rather than <code>map</code> calling <code>f</code>)</li>
 </ul>
-<p>Could you change GHC so that it autoamtically adds <code>HasCallStack</code> constraints everywhere and also hides them from the user, to get the effect of full call-stack coverage? Maybe - that would be an alternative to the scheme I’ve implemented on top of profiling. One difficult area is CAFs, though. If a constraint is added to a CAF, then the CAF is re-evaluated each time it is called, which is obviously undesirable. The profiler goes to some lengths to avoid changing the asymptotic cost of things, but trades off some information in the stack simulation in the process, which is why calls to <code>error</code> sometimes don’t get accurate call stack information.</p></li>
+<p>Could you change GHC so that it automatically adds <code>HasCallStack</code> constraints everywhere and also hides them from the user, to get the effect of full call-stack coverage? Maybe - that would be an alternative to the scheme I’ve implemented on top of profiling. One difficult area is CAFs, though. If a constraint is added to a CAF, then the CAF is re-evaluated each time it is called, which is obviously undesirable. The profiler goes to some lengths to avoid changing the asymptotic cost of things, but trades off some information in the stack simulation in the process, which is why calls to <code>error</code> sometimes don’t get accurate call stack information.</p></li>
 <li><p><strong>DWARF</strong></p>
 <ul>
 <li>No runtime overhead, can be deployed in production.</li>
