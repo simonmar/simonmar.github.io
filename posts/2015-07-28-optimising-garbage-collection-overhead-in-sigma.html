@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="../css/poole.css">
   <link rel="stylesheet" href="../css/syntax.css">
   <link rel="stylesheet" href="../css/lanyon.css">
+  <link rel="stylesheet" href="../css/simonmar.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
 
   <!-- Icons -->
@@ -49,27 +50,27 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London<br>
-      Co-developer of the
+    <p>Software Engineer at Facebook in London</p>
+    <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
- Compiler</a><br>
-      Author
- of <a href="http://chimera.labs.oreilly.com/books/1230000000929">Parallel
- and Concurrent Programming in Haskell</a>.</p>
+ Compiler</a>
+    </p>
 
     <p>
       Twitter: <a href="https://twitter.com/simonmar">@simonmar</a><br>
       Github: <a href="https://github.com/simonmar">simonmar</a><br>
-      Email: <a href="mailto:marlowsd@gmail.com">marlowsd@gmail.com</a>
+      Email: <a href="mailto:marlowsd@gmail.com">marlowsd@gmail.com</a><br>
+      LinkedIn: <a href="https://uk.linkedin.com/in/simonmarlow">Simon Marlow</a>
     </p>
+
+    <a href="../pages/pcph.html">
+      <image width="180" id="sidebar-cover" src="../images/cover.png"></image>
+    </a>
   </div>
 
   <nav class="sidebar-nav">
     <a class="sidebar-nav-item" href="../">
-      Home
-    </a>
-    <a class="sidebar-nav-item" href="../archive.html">
-      Archive
+      Blog
     </a>
   </nav>
 
@@ -152,8 +153,8 @@
 <p>It was simple enough to change the <code>regex-pcre</code> to expose a <code>withRegex</code> function that used scoped allocation rather than <code>ForeignPtr</code>, and then use this. This removed all the <code>ForeignPtr</code>s and saved 5ms per GC.</p>
 <h2 id="saving-20ms-per-gc-by-optimising-static-object-handling">Saving 20ms per GC by optimising static object handling</h2>
 <p>The next thing to look at was <code>zero_static_object_list()</code>. The story behind this is a bit involved. In Haskell we can have top-level lazy definitions; when you write something like this</p>
-<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">x ::</span> <span class="dt">HashMap</span> <span class="dt">Text</span> <span class="dt">Int</span>
-x <span class="fu">=</span> HashMap.fromList [ (<span class="st">&quot;a&quot;</span>,<span class="dv">1</span>), (<span class="st">&quot;b&quot;</span>,<span class="dv">2</span>), <span class="fu">...</span> ]</code></pre>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">x ::</span> <span class="dt">HashMap</span> <span class="dt">Text</span> <span class="dt">Int</span>
+x <span class="fu">=</span> HashMap.fromList [ (<span class="st">&quot;a&quot;</span>,<span class="dv">1</span>), (<span class="st">&quot;b&quot;</span>,<span class="dv">2</span>), <span class="fu">...</span> ]</code></pre></div>
 <p><code>x</code> is a top-level definition that is computed when it is first used. This is called a CAF (Constant Applicative Form).</p>
 <p>Now, the garbage collector needs to know about all the CAFs, because they are roots into the heap. However, it is important to garbage-collect a CAF that is no longer needed, because it might be holding onto a lot of data in the heap. But to tell when <code>x</code> is no longer needed, the GC needs to follow references from <em>code</em>, not just <em>data</em>. So that’s what the GC does - there’s an abstraction of the references from code, called an SRT (Static Reference Table), and the GC traces all the CAFs reachable from the SRTs during every major GC.</p>
 <p>During this process, the GC links all the static objects, like <code>x</code>, together on a list, so it can tell which ones it has seen so far. The list is chained through the objects themselves - each one has a link field that starts NULL and points to the next object on the list when it has been visited. After GC, the fields must be reset to NULL again, which is what <code>zero_static_object_list()</code> is doing. In Sigma there is a lot of code, so this was taking 20ms.</p>
