@@ -8,8 +8,16 @@
         <name>Simon Marlow</name>
         <email>marlowsd@gmail.com</email>
     </author>
-    <updated>2016-02-12T00:00:00Z</updated>
+    <updated>2016-08-24T00:00:00Z</updated>
     <entry>
+    <title>Haskell positions at Facebook</title>
+    <link href="https://simonmar.github.io/posts/2016-08-24-haskell-positions-at-facebook.html" />
+    <id>https://simonmar.github.io/posts/2016-08-24-haskell-positions-at-facebook.html</id>
+    <published>2016-08-24T00:00:00Z</published>
+    <updated>2016-08-24T00:00:00Z</updated>
+    <summary type="html"><![CDATA[]]></summary>
+</entry>
+<entry>
     <title>Stack traces in GHCi, coming in GHC 8.0.1</title>
     <link href="https://simonmar.github.io/posts/2016-02-12-Stack-traces-in-GHCi.html" />
     <id>https://simonmar.github.io/posts/2016-02-12-Stack-traces-in-GHCi.html</id>
