@@ -12,23 +12,23 @@
 
   <title>
       
-        Home &middot; Simon Marlow
+        <a href="http://simonmar.github.io/bib/papers/composable_scheduler_activations.pdf">Composable scheduler activations for Haskell</a> &middot; Simon Marlow
       
   </title>
 
   <!-- CSS -->
-  <link rel="stylesheet" href="./css/poole.css">
-  <link rel="stylesheet" href="./css/syntax.css">
-  <link rel="stylesheet" href="./css/lanyon.css">
-  <link rel="stylesheet" href="./css/simonmar.css">
+  <link rel="stylesheet" href="../css/poole.css">
+  <link rel="stylesheet" href="../css/syntax.css">
+  <link rel="stylesheet" href="../css/lanyon.css">
+  <link rel="stylesheet" href="../css/simonmar.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
 
   <!-- Icons -->
-  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="./images/apple-touch-icon-precomposed.png">
-  <link rel="shortcut icon" href="./images/favicon.ico">
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../images/apple-touch-icon-precomposed.png">
+  <link rel="shortcut icon" href="../images/favicon.ico">
 
   <!-- RSS -->
-  <link rel="alternate" type="application/rss+xml" title="RSS" href="./atom.xml">
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="../atom.xml">
 
 </head>
 
@@ -48,7 +48,7 @@
 -->
 
   <div class="sidebar-item">
-    <img src="./images/simonmarlow.jpg" />
+    <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
     <p>Software Engineer at Facebook in London</p>
     <p>Co-developer of the
@@ -63,16 +63,16 @@
       LinkedIn: <a href="https://uk.linkedin.com/in/simonmarlow">Simon Marlow</a>
     </p>
 
-    <a href="./pages/pcph.html">
-      <image width="180" id="sidebar-cover" src="./images/cover.png"></image>
+    <a href="../pages/pcph.html">
+      <image width="180" id="sidebar-cover" src="../images/cover.png"></image>
     </a>
   </div>
 
   <nav class="sidebar-nav">
-    <a class="sidebar-nav-item" href="./">
+    <a class="sidebar-nav-item" href="../">
       Blog
     </a>
-    <a class="sidebar-nav-item" href="./bib/bib.html">
+    <a class="sidebar-nav-item" href="../bib/bib.html">
       Publications
     </a>
   </nav>
@@ -91,37 +91,18 @@
       <div class="masthead">
         <div class="container">
           <h3 class="masthead-title">
-            <a href="./" title="Home">Simon Marlow</a>
+            <a href="../" title="Home">Simon Marlow</a>
             
           </h3>
         </div>
       </div>
 
       <div class="container content">
-        <ul>
-    
-        <li>
-            <a href="./posts/2016-08-24-haskell-positions-at-facebook.html">Haskell positions at Facebook</a> - August 24, 2016
-        </li>
-    
-        <li>
-            <a href="./posts/2016-02-12-Stack-traces-in-GHCi.html">Stack traces in GHCi, coming in GHC 8.0.1</a> - February 12, 2016
-        </li>
-    
-        <li>
-            <a href="./posts/2015-10-20-Fun-With-Haxl-1.html">Fun With Haxl (Part 1)</a> - October 20, 2015
-        </li>
-    
-        <li>
-            <a href="./posts/2015-07-28-optimising-garbage-collection-overhead-in-sigma.html">Optimising Garbage Collection Overhead in Sigma</a> - July 28, 2015
-        </li>
-    
-</ul>
-
-
-<!--
-<p>…or you can find more in the <a href="/archive.html">archives</a>.</p>
--->
+        <div class="page">
+  <h1 class="page-title"><a href="http://simonmar.github.io/bib/papers/composable_scheduler_activations.pdf">Composable scheduler activations for Haskell</a></h1>
+  <p>(K. C. Sivaramakrishnan, Tim Harris, Simon Marlow, Simon Peyton Jones) <em>Journal of Functional Programming</em>, 26, pages e9 (39 pages), 2016 <a href="composable_scheduler_activations-2016.bib">BibTeX</a></p>
+<p>The runtime for a modern, concurrent, garbage collected language like Java or Haskell is like an operating system: sophisticated, complex, performant, but alas very hard to change. If more of the runtime system were in the high-level language, it would be far more modular and malleable. In this paper, we describe a novel concurrency substrate design for the Glasgow Haskell Compiler that allows multicore schedulers for concurrent and parallel Haskell programs to be safely and modularly described as libraries in Haskell. The approach relies on abstracting the interface to the user-implemented schedulers through scheduler activations, together with the use of Software Transactional Memory to promote safety in a multicore context.</p>
+</div>
 
       </div>
     </div>
