@@ -1,47 +1,132 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
-<!--Rendered using the Haskell Html Library v0.2-->
-<HTML
-><HEAD
-><TITLE
->Abstract : Visual {H}askell: A full-featured {H}askell development environment</TITLE
-></HEAD
-><BODY BGCOLOR="#e0e0e0"
-><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
-><TR
-><TD
-><P
-><B
-><A HREF="http://simonmar.github.io/bib/papers/vshaskell.pdf"
->Visual Haskell: A full-featured Haskell development environment</A
-></B
-> (Krasimir Angelov, Simon Marlow) <I
->Haskell '05: Proceedings of the 2005 ACM SIGPLAN workshop on Haskell</I
->, pages 5--16, Tallinn, Estonia, ACM Press, September 2005</P
-><P
->We describe the design and implementation of a full-featured Haskell
-development environment, based on Microosft's extensible Visual Studio
-environment.
-</P
-><P
->Visual Haskell provides a number of features not found in existing
-Haskell development environments: interactive error-checking,
-displaying of inferred types in the editor, and other features based
-on static properties of the source code.  Visual Haskell also provides
-full support for developing and building multi-module Haskell projects,
-based on the Cabal architecture.  Visual Haskell supports the full GHC
-language, and can be used to develop real Haskell applications
-(including the code of the plugin itself).
-</P
-><P
->Visual Haskell has driven developments in other Haskell-related
-projects: Cabal, the Concurrent FFI extension, and an API to allow
-programmatic access to GHC itself.  Furthermore, development of the
-Visual Haskell plugin required industrial-strength foreign language
-interoperability; we describe all our experiences in detail.
-</P
-></TD
-></TR
-></TABLE
-></BODY
-></HTML
->
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+  <head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  <!-- Enable responsiveness on mobile devices-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title>
+      
+        <a href="http://simonmar.github.io/bib/papers/vshaskell.pdf">Visual {H}askell: A full-featured {H}askell development environment</a> &middot; Simon Marlow
+      
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="../css/poole.css">
+  <link rel="stylesheet" href="../css/syntax.css">
+  <link rel="stylesheet" href="../css/lanyon.css">
+  <link rel="stylesheet" href="../css/simonmar.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
+
+  <!-- Icons -->
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../images/apple-touch-icon-precomposed.png">
+  <link rel="shortcut icon" href="../images/favicon.ico">
+
+  <!-- RSS -->
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="../atom.xml">
+
+</head>
+
+
+  <body>
+
+    <!-- Target for toggling the sidebar `.sidebar-checkbox` is for regular
+     styles, `#sidebar-checkbox` for behavior. -->
+<input type="checkbox" class="sidebar-checkbox" id="sidebar-checkbox">
+
+<!-- Toggleable sidebar -->
+<div class="sidebar" id="sidebar">
+<!--
+  <div class="sidebar-item">
+    <p>{{ site.description }}</p>
+  </div>
+-->
+
+  <div class="sidebar-item">
+    <img src="../images/simonmarlow.jpg" />
+    <p>Simon Marlow</p>
+    <p>Software Engineer at Facebook in London</p>
+    <p>Co-developer of the
+      <a href="http://www.haskell.org/ghc">Glasgow Haskell
+ Compiler</a>
+    </p>
+
+    <p>
+      Twitter: <a href="https://twitter.com/simonmar">@simonmar</a><br>
+      Github: <a href="https://github.com/simonmar">simonmar</a><br>
+      Email: <a href="mailto:marlowsd@gmail.com">marlowsd@gmail.com</a><br>
+      LinkedIn: <a href="https://uk.linkedin.com/in/simonmarlow">Simon Marlow</a>
+    </p>
+
+    <a href="../pages/pcph.html">
+      <image width="180" id="sidebar-cover" src="../images/cover.png"></image>
+    </a>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="sidebar-nav-item" href="../">
+      Blog
+    </a>
+    <a class="sidebar-nav-item" href="../bib/bib.html">
+      Publications
+    </a>
+  </nav>
+
+  <div class="sidebar-item">
+    <p>
+      &copy; Simon Marlow 2016
+    </p>
+  </div>
+</div>
+
+
+    <!-- Wrap is the content to shift when toggling the sidebar. We wrap the
+         content to avoid any CSS collisions with our real content. -->
+    <div class="wrap">
+      <div class="masthead">
+        <div class="container">
+          <h3 class="masthead-title">
+            <a href="../" title="Home">Simon Marlow</a>
+            
+          </h3>
+        </div>
+      </div>
+
+      <div class="container content">
+        <div class="page">
+  <h1 class="page-title"><a href="http://simonmar.github.io/bib/papers/vshaskell.pdf">Visual {H}askell: A full-featured {H}askell development environment</a></h1>
+  <p>(Krasimir Angelov, Simon Marlow) <em>Haskell ’05: Proceedings of the 2005 ACM SIGPLAN workshop on Haskell</em>, pages 5–16, Tallinn, Estonia, ACM Press, September 2005 <a href="vshaskell05.bib">BibTeX</a></p>
+<p>We describe the design and implementation of a full-featured Haskell development environment, based on Microosft’s extensible Visual Studio environment.</p>
+<p>Visual Haskell provides a number of features not found in existing Haskell development environments: interactive error-checking, displaying of inferred types in the editor, and other features based on static properties of the source code. Visual Haskell also provides full support for developing and building multi-module Haskell projects, based on the Cabal architecture. Visual Haskell supports the full GHC language, and can be used to develop real Haskell applications (including the code of the plugin itself).</p>
+<p>Visual Haskell has driven developments in other Haskell-related projects: Cabal, the Concurrent FFI extension, and an API to allow programmatic access to GHC itself. Furthermore, development of the Visual Haskell plugin required industrial-strength foreign language interoperability; we describe all our experiences in detail.</p>
+</div>
+
+      </div>
+    </div>
+
+    <label for="sidebar-checkbox" class="sidebar-toggle"></label>
+
+    <script>
+      (function(document) {
+        var toggle = document.querySelector('.sidebar-toggle');
+        var sidebar = document.querySelector('#sidebar');
+        var checkbox = document.querySelector('#sidebar-checkbox');
+
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+
+          if(!checkbox.checked ||
+             sidebar.contains(target) ||
+             (target === checkbox || target === toggle)) return;
+
+          checkbox.checked = false;
+        }, false);
+      })(document);
+    </script>
+    </body>
+</html>

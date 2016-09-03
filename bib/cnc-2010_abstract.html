@@ -1,36 +1,130 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
-<!--Rendered using the Haskell Html Library v0.2-->
-<HTML
-><HEAD
-><TITLE
->Abstract : Intel Concurrent Collections for {H}askell</TITLE
-></HEAD
-><BODY BGCOLOR="#e0e0e0"
-><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
-><TR
-><TD
-><P
-><B
-><A HREF="http://simonmar.github.io/bib/papers/haskell_cnc_draft_submission.pdf"
->Intel Concurrent Collections for Haskell</A
-></B
-> (Ryan Newton, Chih-Ping Chen, Simon Marlow) (unpublished), 2010</P
-><P
->Intel Concurrent Collections (CnC) is a parallel programming
-model in which a network of steps (functions) communicate
-through message-passing as well as a limited form of shared memory.
-This paper describes a new implementation of CnC for Haskell.
-Compared to existing parallel programming models for Haskell,
-CnC occupies a useful point in the design space: pure and deterministic
-like Strategies, but more explicit about granularity and
-the structure of the computation, which affords the programmer
-greater control over parallel performance. We present results on 4,
-32, and 48-core machines demonstrating parallel speedups ranging
-between 7X and 22X on non-trivial benchmarks.
-</P
-></TD
-></TR
-></TABLE
-></BODY
-></HTML
->
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+  <head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  <!-- Enable responsiveness on mobile devices-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title>
+      
+        <a href="http://simonmar.github.io/bib/papers/haskell_cnc_draft_submission.pdf">Intel Concurrent Collections for {H}askell</a> &middot; Simon Marlow
+      
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="../css/poole.css">
+  <link rel="stylesheet" href="../css/syntax.css">
+  <link rel="stylesheet" href="../css/lanyon.css">
+  <link rel="stylesheet" href="../css/simonmar.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
+
+  <!-- Icons -->
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../images/apple-touch-icon-precomposed.png">
+  <link rel="shortcut icon" href="../images/favicon.ico">
+
+  <!-- RSS -->
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="../atom.xml">
+
+</head>
+
+
+  <body>
+
+    <!-- Target for toggling the sidebar `.sidebar-checkbox` is for regular
+     styles, `#sidebar-checkbox` for behavior. -->
+<input type="checkbox" class="sidebar-checkbox" id="sidebar-checkbox">
+
+<!-- Toggleable sidebar -->
+<div class="sidebar" id="sidebar">
+<!--
+  <div class="sidebar-item">
+    <p>{{ site.description }}</p>
+  </div>
+-->
+
+  <div class="sidebar-item">
+    <img src="../images/simonmarlow.jpg" />
+    <p>Simon Marlow</p>
+    <p>Software Engineer at Facebook in London</p>
+    <p>Co-developer of the
+      <a href="http://www.haskell.org/ghc">Glasgow Haskell
+ Compiler</a>
+    </p>
+
+    <p>
+      Twitter: <a href="https://twitter.com/simonmar">@simonmar</a><br>
+      Github: <a href="https://github.com/simonmar">simonmar</a><br>
+      Email: <a href="mailto:marlowsd@gmail.com">marlowsd@gmail.com</a><br>
+      LinkedIn: <a href="https://uk.linkedin.com/in/simonmarlow">Simon Marlow</a>
+    </p>
+
+    <a href="../pages/pcph.html">
+      <image width="180" id="sidebar-cover" src="../images/cover.png"></image>
+    </a>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="sidebar-nav-item" href="../">
+      Blog
+    </a>
+    <a class="sidebar-nav-item" href="../bib/bib.html">
+      Publications
+    </a>
+  </nav>
+
+  <div class="sidebar-item">
+    <p>
+      &copy; Simon Marlow 2016
+    </p>
+  </div>
+</div>
+
+
+    <!-- Wrap is the content to shift when toggling the sidebar. We wrap the
+         content to avoid any CSS collisions with our real content. -->
+    <div class="wrap">
+      <div class="masthead">
+        <div class="container">
+          <h3 class="masthead-title">
+            <a href="../" title="Home">Simon Marlow</a>
+            
+          </h3>
+        </div>
+      </div>
+
+      <div class="container content">
+        <div class="page">
+  <h1 class="page-title"><a href="http://simonmar.github.io/bib/papers/haskell_cnc_draft_submission.pdf">Intel Concurrent Collections for {H}askell</a></h1>
+  <p>(Ryan Newton, Chih-Ping Chen, Simon Marlow) (unpublished), 2010 <a href="cnc-2010.bib">BibTeX</a></p>
+<p>Intel Concurrent Collections (CnC) is a parallel programming model in which a network of steps (functions) communicate through message-passing as well as a limited form of shared memory. This paper describes a new implementation of CnC for Haskell. Compared to existing parallel programming models for Haskell, CnC occupies a useful point in the design space: pure and deterministic like Strategies, but more explicit about granularity and the structure of the computation, which affords the programmer greater control over parallel performance. We present results on 4, 32, and 48-core machines demonstrating parallel speedups ranging between 7X and 22X on non-trivial benchmarks.</p>
+</div>
+
+      </div>
+    </div>
+
+    <label for="sidebar-checkbox" class="sidebar-toggle"></label>
+
+    <script>
+      (function(document) {
+        var toggle = document.querySelector('.sidebar-toggle');
+        var sidebar = document.querySelector('#sidebar');
+        var checkbox = document.querySelector('#sidebar-checkbox');
+
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+
+          if(!checkbox.checked ||
+             sidebar.contains(target) ||
+             (target === checkbox || target === toggle)) return;
+
+          checkbox.checked = false;
+        }, false);
+      })(document);
+    </script>
+    </body>
+</html>

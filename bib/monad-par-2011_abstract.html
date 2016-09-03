@@ -1,39 +1,130 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
-<!--Rendered using the Haskell Html Library v0.2-->
-<HTML
-><HEAD
-><TITLE
->Abstract : A Monad for Deterministic Parallelism</TITLE
-></HEAD
-><BODY BGCOLOR="#e0e0e0"
-><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
-><TR
-><TD
-><P
-><B
-><A HREF="http://simonmar.github.io/bib/papers/monad-par.pdf"
->A Monad for Deterministic Parallelism</A
-></B
-> (Simon Marlow, Ryan Newton, Simon Peyton Jones) <I
->Haskell '11: Proceedings of the Fourth ACM SIGPLAN Symposium on Haskell</I
->, Tokyo, Japan, ACM, 2011</P
-><P
->We present a new programming model for deterministic parallel
-computation in a pure functional language.  The model is monadic and
-has explicit granularity, but allows dynamic construction of dataflow
-networks that are scheduled at runtime, while remaining deterministic
-and pure.  The implementation is based on monadic concurrency, which
-has until now only been used to simulate concurrency in functional
-languages, rather than to provide parallelism.  We present the API
-with its semantics, and argue that parallel execution is
-deterministic.  Furthermore, we present a complete work-stealing
-scheduler implemented as a Haskell library, and we show that it
-performs at least as well as the existing parallel programming models
-in Haskell.
-</P
-></TD
-></TR
-></TABLE
-></BODY
-></HTML
->
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+  <head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  <!-- Enable responsiveness on mobile devices-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title>
+      
+        <a href="http://simonmar.github.io/bib/papers/monad-par.pdf">A Monad for Deterministic Parallelism</a> &middot; Simon Marlow
+      
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="../css/poole.css">
+  <link rel="stylesheet" href="../css/syntax.css">
+  <link rel="stylesheet" href="../css/lanyon.css">
+  <link rel="stylesheet" href="../css/simonmar.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
+
+  <!-- Icons -->
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../images/apple-touch-icon-precomposed.png">
+  <link rel="shortcut icon" href="../images/favicon.ico">
+
+  <!-- RSS -->
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="../atom.xml">
+
+</head>
+
+
+  <body>
+
+    <!-- Target for toggling the sidebar `.sidebar-checkbox` is for regular
+     styles, `#sidebar-checkbox` for behavior. -->
+<input type="checkbox" class="sidebar-checkbox" id="sidebar-checkbox">
+
+<!-- Toggleable sidebar -->
+<div class="sidebar" id="sidebar">
+<!--
+  <div class="sidebar-item">
+    <p>{{ site.description }}</p>
+  </div>
+-->
+
+  <div class="sidebar-item">
+    <img src="../images/simonmarlow.jpg" />
+    <p>Simon Marlow</p>
+    <p>Software Engineer at Facebook in London</p>
+    <p>Co-developer of the
+      <a href="http://www.haskell.org/ghc">Glasgow Haskell
+ Compiler</a>
+    </p>
+
+    <p>
+      Twitter: <a href="https://twitter.com/simonmar">@simonmar</a><br>
+      Github: <a href="https://github.com/simonmar">simonmar</a><br>
+      Email: <a href="mailto:marlowsd@gmail.com">marlowsd@gmail.com</a><br>
+      LinkedIn: <a href="https://uk.linkedin.com/in/simonmarlow">Simon Marlow</a>
+    </p>
+
+    <a href="../pages/pcph.html">
+      <image width="180" id="sidebar-cover" src="../images/cover.png"></image>
+    </a>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="sidebar-nav-item" href="../">
+      Blog
+    </a>
+    <a class="sidebar-nav-item" href="../bib/bib.html">
+      Publications
+    </a>
+  </nav>
+
+  <div class="sidebar-item">
+    <p>
+      &copy; Simon Marlow 2016
+    </p>
+  </div>
+</div>
+
+
+    <!-- Wrap is the content to shift when toggling the sidebar. We wrap the
+         content to avoid any CSS collisions with our real content. -->
+    <div class="wrap">
+      <div class="masthead">
+        <div class="container">
+          <h3 class="masthead-title">
+            <a href="../" title="Home">Simon Marlow</a>
+            
+          </h3>
+        </div>
+      </div>
+
+      <div class="container content">
+        <div class="page">
+  <h1 class="page-title"><a href="http://simonmar.github.io/bib/papers/monad-par.pdf">A Monad for Deterministic Parallelism</a></h1>
+  <p>(Simon Marlow, Ryan Newton, Simon Peyton Jones) <em>Haskell ’11: Proceedings of the Fourth ACM SIGPLAN Symposium on Haskell</em>, Tokyo, Japan, ACM, 2011 <a href="monad-par-2011.bib">BibTeX</a></p>
+<p>We present a new programming model for deterministic parallel computation in a pure functional language. The model is monadic and has explicit granularity, but allows dynamic construction of dataflow networks that are scheduled at runtime, while remaining deterministic and pure. The implementation is based on monadic concurrency, which has until now only been used to simulate concurrency in functional languages, rather than to provide parallelism. We present the API with its semantics, and argue that parallel execution is deterministic. Furthermore, we present a complete work-stealing scheduler implemented as a Haskell library, and we show that it performs at least as well as the existing parallel programming models in Haskell.</p>
+</div>
+
+      </div>
+    </div>
+
+    <label for="sidebar-checkbox" class="sidebar-toggle"></label>
+
+    <script>
+      (function(document) {
+        var toggle = document.querySelector('.sidebar-toggle');
+        var sidebar = document.querySelector('#sidebar');
+        var checkbox = document.querySelector('#sidebar-checkbox');
+
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+
+          if(!checkbox.checked ||
+             sidebar.contains(target) ||
+             (target === checkbox || target === toggle)) return;
+
+          checkbox.checked = false;
+        }, false);
+      })(document);
+    </script>
+    </body>
+</html>

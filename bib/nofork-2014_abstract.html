@@ -1,51 +1,131 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
-<!--Rendered using the Haskell Html Library v0.2-->
-<HTML
-><HEAD
-><TITLE
->Abstract : There is No Fork: An Abstraction for Efficient, Concurrent, and Concise Data Access</TITLE
-></HEAD
-><BODY BGCOLOR="#e0e0e0"
-><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
-><TR
-><TD
-><P
-><B
-><A HREF="http://simonmar.github.io/bib/papers/haxl-icfp14.pdf"
->There is No Fork: An Abstraction for Efficient, Concurrent, and Concise Data Access</A
-></B
-> (Simon Marlow, Louis Brandy, Jonathan Coens, Jon Purdy) <I
->Proceedings of the 19th ACM SIGPLAN International Conference on Functional Programming</I
->, pages 325--337, Gothenburg, Sweden, ACM, 2014</P
-><P
->We describe a new programming idiom for concurrency, based on
-Applicative Functors, where concurrency is implicit in the Applica-
-tive &lt;*&gt; operator. The result is that concurrent programs can be
-written in a natural applicative style, and they retain a high degree
-of clarity and modularity while executing with maximal concur-
-rency. This idiom is particularly useful for programming against
-external data sources, where the application code is written without
-the use of explicit concurrency constructs, while the implementa-
-tion is able to batch together multiple requests for data from the
-same source, and fetch data from multiple sources concurrently.
-Our abstraction uses a cache to ensure that multiple requests for
-the same data return the same result, which frees the programmer
-from having to arrange to fetch data only once, which in turn leads
-to greater modularity.
-</P
-><P
->While it is generally applicable, our technique was designed
-with a particular application in mind: an internal service at Face-
-book that identifies particular types of content and takes actions
-based on it. Our application has a large body of business logic that
-fetches data from several different external sources. The framework
-described in this paper enables the business logic to execute ef-
-ficiently by automatically fetching data concurrently; we present
-some preliminary results.
-</P
-></TD
-></TR
-></TABLE
-></BODY
-></HTML
->
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+  <head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  <!-- Enable responsiveness on mobile devices-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title>
+      
+        <a href="http://simonmar.github.io/bib/papers/haxl-icfp14.pdf">There is No Fork: An Abstraction for Efficient, Concurrent, and Concise Data Access</a> &middot; Simon Marlow
+      
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="../css/poole.css">
+  <link rel="stylesheet" href="../css/syntax.css">
+  <link rel="stylesheet" href="../css/lanyon.css">
+  <link rel="stylesheet" href="../css/simonmar.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
+
+  <!-- Icons -->
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../images/apple-touch-icon-precomposed.png">
+  <link rel="shortcut icon" href="../images/favicon.ico">
+
+  <!-- RSS -->
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="../atom.xml">
+
+</head>
+
+
+  <body>
+
+    <!-- Target for toggling the sidebar `.sidebar-checkbox` is for regular
+     styles, `#sidebar-checkbox` for behavior. -->
+<input type="checkbox" class="sidebar-checkbox" id="sidebar-checkbox">
+
+<!-- Toggleable sidebar -->
+<div class="sidebar" id="sidebar">
+<!--
+  <div class="sidebar-item">
+    <p>{{ site.description }}</p>
+  </div>
+-->
+
+  <div class="sidebar-item">
+    <img src="../images/simonmarlow.jpg" />
+    <p>Simon Marlow</p>
+    <p>Software Engineer at Facebook in London</p>
+    <p>Co-developer of the
+      <a href="http://www.haskell.org/ghc">Glasgow Haskell
+ Compiler</a>
+    </p>
+
+    <p>
+      Twitter: <a href="https://twitter.com/simonmar">@simonmar</a><br>
+      Github: <a href="https://github.com/simonmar">simonmar</a><br>
+      Email: <a href="mailto:marlowsd@gmail.com">marlowsd@gmail.com</a><br>
+      LinkedIn: <a href="https://uk.linkedin.com/in/simonmarlow">Simon Marlow</a>
+    </p>
+
+    <a href="../pages/pcph.html">
+      <image width="180" id="sidebar-cover" src="../images/cover.png"></image>
+    </a>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="sidebar-nav-item" href="../">
+      Blog
+    </a>
+    <a class="sidebar-nav-item" href="../bib/bib.html">
+      Publications
+    </a>
+  </nav>
+
+  <div class="sidebar-item">
+    <p>
+      &copy; Simon Marlow 2016
+    </p>
+  </div>
+</div>
+
+
+    <!-- Wrap is the content to shift when toggling the sidebar. We wrap the
+         content to avoid any CSS collisions with our real content. -->
+    <div class="wrap">
+      <div class="masthead">
+        <div class="container">
+          <h3 class="masthead-title">
+            <a href="../" title="Home">Simon Marlow</a>
+            
+          </h3>
+        </div>
+      </div>
+
+      <div class="container content">
+        <div class="page">
+  <h1 class="page-title"><a href="http://simonmar.github.io/bib/papers/haxl-icfp14.pdf">There is No Fork: An Abstraction for Efficient, Concurrent, and Concise Data Access</a></h1>
+  <p>(Simon Marlow, Louis Brandy, Jonathan Coens, Jon Purdy) <em>Proceedings of the 19th ACM SIGPLAN International Conference on Functional Programming</em>, pages 325–337, Gothenburg, Sweden, ACM, 2014 <a href="nofork-2014.bib">BibTeX</a></p>
+<p>We describe a new programming idiom for concurrency, based on Applicative Functors, where concurrency is implicit in the Applicative &lt;*&gt; operator. The result is that concurrent programs can be written in a natural applicative style, and they retain a high degree of clarity and modularity while executing with maximal concurrency. This idiom is particularly useful for programming against external data sources, where the application code is written without the use of explicit concurrency constructs, while the implementation is able to batch together multiple requests for data from the same source, and fetch data from multiple sources concurrently. Our abstraction uses a cache to ensure that multiple requests for the same data return the same result, which frees the programmer from having to arrange to fetch data only once, which in turn leads to greater modularity.</p>
+<p>While it is generally applicable, our technique was designed with a particular application in mind: an internal service at Face- book that identifies particular types of content and takes actions based on it. Our application has a large body of business logic that fetches data from several different external sources. The framework described in this paper enables the business logic to execute ef- ficiently by automatically fetching data concurrently; we present some preliminary results.</p>
+</div>
+
+      </div>
+    </div>
+
+    <label for="sidebar-checkbox" class="sidebar-toggle"></label>
+
+    <script>
+      (function(document) {
+        var toggle = document.querySelector('.sidebar-toggle');
+        var sidebar = document.querySelector('#sidebar');
+        var checkbox = document.querySelector('#sidebar-checkbox');
+
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+
+          if(!checkbox.checked ||
+             sidebar.contains(target) ||
+             (target === checkbox || target === toggle)) return;
+
+          checkbox.checked = false;
+        }, false);
+      })(document);
+    </script>
+    </body>
+</html>

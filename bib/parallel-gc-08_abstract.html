@@ -1,35 +1,130 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
-<!--Rendered using the Haskell Html Library v0.2-->
-<HTML
-><HEAD
-><TITLE
->Abstract : Parallel Generational-Copying Garbage Collection with a Block-Structured Heap</TITLE
-></HEAD
-><BODY BGCOLOR="#e0e0e0"
-><TABLE ALIGN="center" WIDTH="800" CELLSPACING="5" BGCOLOR="#ffffff"
-><TR
-><TD
-><P
-><B
-><A HREF="http://simonmar.github.io/bib/papers/parallel-gc.pdf"
->Parallel Generational-Copying Garbage Collection with a Block-Structured Heap</A
-></B
-> (Simon Marlow, Tim Harris, Roshan P. James, Simon Peyton Jones) <I
->ISMM '08: Proceedings of the 7th international symposium on Memory management</I
->, Tucson, Arizona, ACM, June 2008</P
-><P
->We present a parallel generational-copying garbage collector
-implemented for the Glasgow Haskell Compiler.  We use a
-block-structured memory allocator, which provides a natural
-granularity for dividing the work of GC between many threads, leading
-to a simple yet effective method for parallelising copying GC.  The
-results are encouraging: we demonstrate wall-clock speedups of on
-average a factor of 2 in GC time on a commodity 4-core machine with no
-programmer intervention, compared to our best sequential GC.
-</P
-></TD
-></TR
-></TABLE
-></BODY
-></HTML
->
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+  <head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  <!-- Enable responsiveness on mobile devices-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title>
+      
+        <a href="http://simonmar.github.io/bib/papers/parallel-gc.pdf">Parallel Generational-Copying Garbage Collection with a Block-Structured Heap</a> &middot; Simon Marlow
+      
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="../css/poole.css">
+  <link rel="stylesheet" href="../css/syntax.css">
+  <link rel="stylesheet" href="../css/lanyon.css">
+  <link rel="stylesheet" href="../css/simonmar.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
+
+  <!-- Icons -->
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../images/apple-touch-icon-precomposed.png">
+  <link rel="shortcut icon" href="../images/favicon.ico">
+
+  <!-- RSS -->
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="../atom.xml">
+
+</head>
+
+
+  <body>
+
+    <!-- Target for toggling the sidebar `.sidebar-checkbox` is for regular
+     styles, `#sidebar-checkbox` for behavior. -->
+<input type="checkbox" class="sidebar-checkbox" id="sidebar-checkbox">
+
+<!-- Toggleable sidebar -->
+<div class="sidebar" id="sidebar">
+<!--
+  <div class="sidebar-item">
+    <p>{{ site.description }}</p>
+  </div>
+-->
+
+  <div class="sidebar-item">
+    <img src="../images/simonmarlow.jpg" />
+    <p>Simon Marlow</p>
+    <p>Software Engineer at Facebook in London</p>
+    <p>Co-developer of the
+      <a href="http://www.haskell.org/ghc">Glasgow Haskell
+ Compiler</a>
+    </p>
+
+    <p>
+      Twitter: <a href="https://twitter.com/simonmar">@simonmar</a><br>
+      Github: <a href="https://github.com/simonmar">simonmar</a><br>
+      Email: <a href="mailto:marlowsd@gmail.com">marlowsd@gmail.com</a><br>
+      LinkedIn: <a href="https://uk.linkedin.com/in/simonmarlow">Simon Marlow</a>
+    </p>
+
+    <a href="../pages/pcph.html">
+      <image width="180" id="sidebar-cover" src="../images/cover.png"></image>
+    </a>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="sidebar-nav-item" href="../">
+      Blog
+    </a>
+    <a class="sidebar-nav-item" href="../bib/bib.html">
+      Publications
+    </a>
+  </nav>
+
+  <div class="sidebar-item">
+    <p>
+      &copy; Simon Marlow 2016
+    </p>
+  </div>
+</div>
+
+
+    <!-- Wrap is the content to shift when toggling the sidebar. We wrap the
+         content to avoid any CSS collisions with our real content. -->
+    <div class="wrap">
+      <div class="masthead">
+        <div class="container">
+          <h3 class="masthead-title">
+            <a href="../" title="Home">Simon Marlow</a>
+            
+          </h3>
+        </div>
+      </div>
+
+      <div class="container content">
+        <div class="page">
+  <h1 class="page-title"><a href="http://simonmar.github.io/bib/papers/parallel-gc.pdf">Parallel Generational-Copying Garbage Collection with a Block-Structured Heap</a></h1>
+  <p>(Simon Marlow, Tim Harris, Roshan P. James, Simon Peyton Jones) <em>ISMM ’08: Proceedings of the 7th international symposium on Memory management</em>, Tucson, Arizona, ACM, June 2008 <a href="parallel-gc-08.bib">BibTeX</a></p>
+<p>We present a parallel generational-copying garbage collector implemented for the Glasgow Haskell Compiler. We use a block-structured memory allocator, which provides a natural granularity for dividing the work of GC between many threads, leading to a simple yet effective method for parallelising copying GC. The results are encouraging: we demonstrate wall-clock speedups of on average a factor of 2 in GC time on a commodity 4-core machine with no programmer intervention, compared to our best sequential GC.</p>
+</div>
+
+      </div>
+    </div>
+
+    <label for="sidebar-checkbox" class="sidebar-toggle"></label>
+
+    <script>
+      (function(document) {
+        var toggle = document.querySelector('.sidebar-toggle');
+        var sidebar = document.querySelector('#sidebar');
+        var checkbox = document.querySelector('#sidebar-checkbox');
+
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+
+          if(!checkbox.checked ||
+             sidebar.contains(target) ||
+             (target === checkbox || target === toggle)) return;
+
+          checkbox.checked = false;
+        }, false);
+      })(document);
+    </script>
+    </body>
+</html>
