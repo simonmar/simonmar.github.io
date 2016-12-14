@@ -140,7 +140,7 @@
 <p>How is this done? There’s a new C API exposed by the RTS:</p>
 <pre><code>void rts_setInCallCapability (int preferred_capability, int affinity);</code></pre>
 <p>In each thread you call this to map that thread to a particular capability. For example you might call it like this:</p>
-<pre><code>static std:atomic&lt;int&gt; counter;
+<pre><code>static std::atomic&lt;int&gt; counter;
 ...
 rts_setInCallCapability(counter.fetch_add(1), 0);</code></pre>
 <p>And ensure that you call this once per thread. The <code>affinity</code> argument is for binding a thread to a CPU core, which might be useful if you’re also using GHC’s affinity setting (<code>+RTS -qa</code>). In our case we haven’t found this to be useful.</p>
