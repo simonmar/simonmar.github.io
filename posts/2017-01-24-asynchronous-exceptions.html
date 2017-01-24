@@ -137,14 +137,14 @@
 
 </div>
 <p>Allocation limits have helped protect us from disaster on several occasions. One time, an infinite loop made its way into production; the result was that our monitoring showed an increase in requests hitting the allocation limit. The data being logged allowed it to be narrowed down to one particular type of request, we were quickly able to identify the change that caused the problem, undo it, and notify the owner. Nobody else noticed.</p>
-<h2 id="in-the-vast-majority-of-code-we-dont-need-to-worry-about-asynchronous-exeptions">In the vast majority of code, we don’t need to worry about asynchronous exeptions</h2>
+<h2 id="in-the-vast-majority-of-code-we-dont-need-to-worry-about-asynchronous-exceptions">In the vast majority of code, we don’t need to worry about asynchronous exceptions</h2>
 <p>Because you don’t have to poll for an asynchronous exception, they work almost everywhere. All pure code works with asynchronous exceptions without change.</p>
 <p>In our platform, clients write code on top of the <a href="https://github.com/facebook/Haxl">Haxl</a> framework in which I/O is provided only via a fixed set of APIs that we control, so we can guarantee that those APIs are safe, and therefore all of the client code is safe by virtue of abstraction.</p>
 <h2 id="some-parts-of-the-code-can-be-really-hard-to-get-right">Some parts of the code can be <em>really hard to get right</em></h2>
 <p>That leaves the parts of the code that implement the I/O libraries and other lower level functionality. These are the places where we have to care about asynchronous exceptions: if an async exception fires when we have just opened a connection to a remote server, we have to close it again and free all the resources associated with the connection, for example.</p>
 <p>In principle, you can follow a few guidelines to be safe.</p>
 <ul>
-<li><p>Use <code>bracket</code> when allocating any kind of resource that needs to be explicitly released. This is not specific to asynchronous exceptions: coping with with ordinary synchronous exceptions requires a good resource-allocation discipline, so your code should be using <code>bracket</code> anyway.</p></li>
+<li><p>Use <code>bracket</code> when allocating any kind of resource that needs to be explicitly released. This is not specific to asynchronous exceptions: coping with ordinary synchronous exceptions requires a good resource-allocation discipline, so your code should be using <code>bracket</code> anyway.</p></li>
 <li><p>Use the <code>async</code> package which avoids some of the common problems, such as making sure that you fork a thread inside <code>mask</code> to avoid asynchronous exceptions leaking.</p></li>
 </ul>
 <p>Nevertheless it’s still possible to go wrong. Here are some ways:</p>
