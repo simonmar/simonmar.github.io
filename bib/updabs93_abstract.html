@@ -75,6 +75,9 @@
     <a class="sidebar-nav-item" href="../bib/bib.html">
       Publications
     </a>
+    <a class="sidebar-nav-item" href="../pages/talks.html">
+      Talks
+    </a>
   </nav>
 
   <div class="sidebar-item">
@@ -96,7 +99,8 @@
             <span class="masthead-links">
               <a href="../">Blog</a> |
               <a href="../pages/pcph.html">Book</a> |
-              <a href="../bib/bib.html">Publications</a>
+              <a href="../bib/bib.html">Publications</a> |
+              <a href="../pages/talks.html">Talks</a>
             </span>
           </h3>
         </div>
@@ -106,7 +110,7 @@
         <div class="page">
   <h1 class="page-title">Update Avoidance Analysis by Abstract Interpretation</h1>
   <p>(Simon Marlow) <em>Proceedings of the 1993 Glasgow Workshop on Functional Programming</em>, Ayr, Scotland, Springer-Verlag, 1993</p>
-<p><a href="updabs93.bib">BibTeX</a></p>
+<div style="white-space: pre-line;"><a href="updabs93.bib">BibTeX</a></div>
 <p>A requirement of lazy evaluation is that the value of any subexpression in the program is calculated no more than once. This is achieved by updating an expression with its value, once computed. The problem is that updating is a costly operation, and experimentation has shown that it is only necessary in about 30% of cases (that is, 70% of expressions represent values that are only ever required once during execution). The aim of the analysis presented in this paper is to discover expressions that do not need to be updated, and thus reduce the execution time of the program. The analysis has been implemented in the Glasgow Haskell Compiler, and results are given.</p>
 </div>
 
