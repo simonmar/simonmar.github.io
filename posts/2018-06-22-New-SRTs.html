@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+  <head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  <!-- Enable responsiveness on mobile devices-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title>
+      
+        Rethinking Static Reference Tables in GHC &middot; Simon Marlow
+      
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="../css/poole.css">
+  <link rel="stylesheet" href="../css/syntax.css">
+  <link rel="stylesheet" href="../css/lanyon.css">
+  <link rel="stylesheet" href="../css/simonmar.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
+
+  <!-- Icons -->
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../images/apple-touch-icon-precomposed.png">
+  <link rel="shortcut icon" href="../images/favicon.ico">
+
+  <!-- RSS -->
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="../atom.xml">
+
+</head>
+
+
+  <body>
+
+    <!-- Target for toggling the sidebar `.sidebar-checkbox` is for regular
+     styles, `#sidebar-checkbox` for behavior. -->
+<input type="checkbox" class="sidebar-checkbox" id="sidebar-checkbox">
+
+<!-- Toggleable sidebar -->
+<div class="sidebar" id="sidebar">
+<!--
+  <div class="sidebar-item">
+    <p>{{ site.description }}</p>
+  </div>
+-->
+
+  <div class="sidebar-item">
+    <img src="../images/simonmarlow.jpg" />
+    <p>Simon Marlow</p>
+    <p>Software Engineer at Facebook in London</p>
+    <p>Co-developer of the
+      <a href="http://www.haskell.org/ghc">Glasgow Haskell
+ Compiler</a>
+    </p>
+
+    <p>
+      Twitter: <a href="https://twitter.com/simonmar">@simonmar</a><br>
+      Github: <a href="https://github.com/simonmar">simonmar</a><br>
+      Email: <a href="mailto:marlowsd@gmail.com">marlowsd@gmail.com</a><br>
+      LinkedIn: <a href="https://uk.linkedin.com/in/simonmarlow">Simon Marlow</a>
+    </p>
+
+    <a href="../pages/pcph.html">
+      <image width="180" id="sidebar-cover" src="../images/cover.png"></image>
+    </a>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="sidebar-nav-item" href="../">
+      Blog
+    </a>
+    <a class="sidebar-nav-item" href="../bib/bib.html">
+      Publications
+    </a>
+    <a class="sidebar-nav-item" href="../pages/talks.html">
+      Talks
+    </a>
+  </nav>
+
+  <div class="sidebar-item">
+    <p>
+      &copy; Simon Marlow 2016
+    </p>
+  </div>
+</div>
+
+
+    <!-- Wrap is the content to shift when toggling the sidebar. We wrap the
+         content to avoid any CSS collisions with our real content. -->
+    <div class="wrap">
+      <div class="masthead">
+        <div class="container">
+          <h3 class="masthead-title">
+            <a href="../" title="Home">Simon Marlow</a>
+            
+            <span class="masthead-links">
+              <a href="../">Blog</a> |
+              <a href="../pages/pcph.html">Book</a> |
+              <a href="../bib/bib.html">Publications</a> |
+              <a href="../pages/talks.html">Talks</a>
+            </span>
+          </h3>
+        </div>
+      </div>
+
+      <div class="container content">
+        <div class="post">
+  <h1 class="post-title">Rethinking Static Reference Tables in GHC</h1>
+  <span class="post-date">June 22, 2018</span>
+  <p>It seems rare these days to be able to make an improvement that’s unambiguously better on every axis. Most changes involve a tradeoff of some kind. With a compiler, the tradeoff is often between performance and code size (e.g. specialising code to make it faster leaves us with more code), or between performance and complexity (e.g. adding a fancy new optimisation), or between compile-time performance and runtime performance.</p>
+<p>Recently I was lucky enough to be able to finish a project I’ve been working on intermittently in GHC for several years, and the result was satisfyingly better on just about every axis.</p>
+<ul>
+<li><p>Code size: overall binary sizes are reduced by ~5% for large programs, ~3% for smaller programs.</p></li>
+<li><p>Runtime performance: no measurable change on benchmarks, although some really bad corner cases where the old code performed terribly should now be gone.</p></li>
+<li><p>Complexity: some complex representations were removed from the runtime, making GC simpler, and the compiler itself also became simpler.</p></li>
+<li><p>Compile-time performance: slightly improved (0.2%).</p></li>
+</ul>
+<p>To explain what the change is, first we’ll need some background.</p>
+<h2 id="garbage-collecting-cafs">Garbage collecting CAFs</h2>
+<p>A Constant Applicative Form (CAF) is a top-level thunk. For example:</p>
+<pre><code>myMap :: HashMap Text Int
+myMap = HashMap.fromList [
+  -- lots of data
+  ]</code></pre>
+<p>Now, <code>myMap</code> is represented in the compiled program by a static closure that looks like this:</p>
+<div class="figure">
+<img src="../images/static-closure.png" />
+
+</div>
+<p>When the program demands the value of <code>myMap</code> for the first time, the representation will change to this:</p>
+<div class="figure">
+<img src="../images/evaluated-static-closure.png" />
+
+</div>
+<p>At this point, we have a reference from the original static closure, which is part of the compiled program, into the dynamic heap. The garbage collector needs to know about this reference, because it has to treat the value of <code>myMap</code> as live data, and ensure that this reference remains valid.</p>
+<p>How could we do that? One way would be to just keep all the CAFs alive for ever. We could keep a list of them and use the list as a source of roots in the GC. That would work, but we’d never be able to garbage-collect any top-level data. Back in the distant past GHC used to work this way, but it interacted badly with the full-laziness optimisation which likes to float things out to the top level - we had to be really careful not to float things out as CAFs because the data would be retained for ever.</p>
+<p>Or, we could track the liveness of CAFs properly, like we do for other data. But how can we find all the references to <code>myMap</code>? The problem with top-level closures is that their references appear in <em>code</em>, not just <em>data</em>. For example, somewhere else in our program we might have</p>
+<pre><code>myLookup :: String -&gt; Maybe Int
+myLookup name = HashMap.lookup name myMap</code></pre>
+<p>and in the compiled code for <code>myLookup</code> will be a reference to <code>myMap</code>.</p>
+<p>To be able to know when we should keep <code>myMap</code> alive, the garbage collector has to traverse all the references from code as well as data.</p>
+<p>Of course, actually searching through the code for symbols isn’t practical, so GHC produces an additional data structure for all the code it compiles, called the Static Reference Table (SRT). The SRT for <code>myLookup</code> will contain a reference to <code>myMap</code>.</p>
+<p>The naive way to do this would be to just have a table of all the static references for each code block. But it turns out that there’s quite a lot of opportunities for sharing between SRTs - lots of code blocks refer to the same things - so it makes sense to try to use a more optimised representation.</p>
+<p>The representation that GHC 8.4 and earlier used was this:</p>
+<div class="figure">
+<img src="../images/old-srt.png" />
+
+</div>
+<p>All the static references in a module were collected together into a single table (<code>ThisModule_srt</code> in the diagram), and every static closure selects the entries it needs with a combination of a pointer (<code>srt</code>) into the table and a bitmap (<code>srt_bitmap</code>).</p>
+<p>This had a few problems:</p>
+<ul>
+<li><p>On a 64-bit machine we need at least 96 bits for the SRT in every static closure and continuation that has at least one static reference: 64 bits to point to the table and a 32-bit bitmap.</p></li>
+<li><p>Sometimes the heuristics in the compiler for generating the table worked really badly. I observed some cases with particularly large modules where we generated an SRT containing two entries that were thousands of entries apart in the table, which required a huge bitmap.</p></li>
+<li><p>There was complex code in the RTS for traversing these bitmaps, and complex code in the compiler to generate this table that nobody really understood.</p></li>
+</ul>
+<h2 id="the-shiny-new-way">The shiny new way</h2>
+<p>The basic idea is quite straightforward: instead of the single table and bitmap representation, each code block that needs an SRT will have an associated SRT object, like this:</p>
+<div class="figure">
+<img src="../images/new-srt.png" />
+
+</div>
+<p>Firstly, this representation is a lot simpler, because an SRT object has exactly the same representation as a static constructor, so we need no new code in the GC to handle it. All the code to deal with bitmaps goes away.</p>
+<p>However, just making this representation change by itself will cause a lot of code growth, because we lose many of the optimisations and sharing that we were able to do with the table and bitmap representation.</p>
+<p>But the new representation has some great opportunities for optimisation of its own, and exploiting all these optimisations results in more compact code than before.</p>
+<h3 id="we-never-need-a-singleton-srt">We never need a singleton SRT</h3>
+<p>If an SRT has one reference in it, we replace the pointer to the SRT with the pointer to the reference itself.</p>
+<div class="figure">
+<img src="../images/singleton-srt.png" />
+
+</div>
+<h3 id="the-srt-field-for-each-code-block-can-be-32-bits-not-96">The SRT field for each code block can be 32 bits, not 96</h3>
+<p>Since we only need a pointer, not a pointer and a bitmap, the overhead goes down to 64 bits. Furthermore, by exploiting the fact that we can represent local pointers by 32-bit offsets (on x86_64), the overhead goes down to 32 bits.</p>
+<div class="figure">
+<img src="../images/relative-srt-ref.png" />
+
+</div>
+<h3 id="we-can-common-up-identical-srts">We can common up identical SRTs</h3>
+<p>This is an obvious one: if multiple code blocks have the same set of static references, they can share a single SRT object.</p>
+<h3 id="we-can-drop-duplicate-references-from-an-srt">We can drop duplicate references from an SRT</h3>
+<p>Sometimes an SRT refers to a closure that is also referred to by something that is reachable from the same SRT. For example:</p>
+<div class="figure">
+<img src="../images/new-srt-drop.png" />
+
+</div>
+<p>In this case we can drop the reference to <code>x</code> in the outer SRT, because it’s already contained in the inner SRT. That leaves the outer SRT with a single reference, which means the SRT object itself can just disappear, by the singleton optimisation mentioned earlier.</p>
+<h3 id="for-a-function-we-can-combine-the-srt-with-the-static-closure-itself">For a function, we can combine the SRT with the static closure itself</h3>
+<p>A top-level function with an SRT would look like this:</p>
+<div class="figure">
+<img src="../images/new-srt-fun.png" />
+
+</div>
+<p>We might as well just merge the two objects together, and put the SRT entries in the function closure, to give this:</p>
+<div class="figure">
+<img src="../images/new-srt-fun2.png" />
+
+</div>
+<p>Together, these optimisations were enough to reduce code size compared with the old table/bitmap representation.</p>
+<h2 id="show-me-the-code">Show me the code</h2>
+<ul>
+<li><a href="https://phabricator.haskell.org/D4632">An overhaul of the SRT representation </a></li>
+<li><a href="https://phabricator.haskell.org/D4634">Save a word in the info table on x86_64</a></li>
+<li><a href="https://phabricator.haskell.org/D4637">Merge FUN_STATIC closure with its SRT</a></li>
+</ul>
+<p>Look out for (slightly) smaller binaries in GHC 8.6.1.</p>
+</div>
+
+      </div>
+    </div>
+
+    <label for="sidebar-checkbox" class="sidebar-toggle"></label>
+
+    <script>
+      (function(document) {
+        var toggle = document.querySelector('.sidebar-toggle');
+        var sidebar = document.querySelector('#sidebar');
+        var checkbox = document.querySelector('#sidebar-checkbox');
+
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+
+          if(!checkbox.checked ||
+             sidebar.contains(target) ||
+             (target === checkbox || target === toggle)) return;
+
+          checkbox.checked = false;
+        }, false);
+      })(document);
+    </script>
+    </body>
+</html>
