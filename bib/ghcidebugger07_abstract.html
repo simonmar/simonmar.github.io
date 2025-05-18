@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -111,8 +111,21 @@
   <h1 class="page-title">A Lightweight Interactive Debugger for {H}askell</h1>
   <p>(Simon Marlow, Jos’e Iborra, Bernard Pope, Andy Gill) Haskell ’07: Proceedings of the ACM SIGPLAN workshop on Haskell workshop, pages 13–24, Freiburg, Germany, ACM, June 2007</p>
 <p><a href="http://simonmar.github.io/bib/papers/ghci-debug.pdf">Full Paper</a> | <a href="ghcidebugger07.bib">BibTeX</a></p>
-<p>This paper describes the design and construction of a Haskell source-level debugger built into the GHCi interactive environment. We have taken a pragmatic approach: the debugger is based on the traditional stop-examine-continue model of online debugging, which is simple and intuitive, but has traditionally been shunned in the context of Haskell because it exposes the lazy evaluation order. We argue that this drawback is not as severe as it may seem, and in some cases is an advantage.</p>
-<p>The design focusses on : our debugger is intended to work on all programs that can be compiled with GHC, and without requiring the programmer to jump through additional hoops to debug their program. The debugger has a novel approach for reconstructing the type of runtime values in a polymorphic context. Our implementation is light on complexity, and was integrated into GHC without significant upheaval.</p>
+<p>This paper describes the design and construction of a Haskell
+source-level debugger built into the GHCi interactive environment. We
+have taken a pragmatic approach: the debugger is based on the
+traditional stop-examine-continue model of online debugging, which is
+simple and intuitive, but has traditionally been shunned in the
+context of Haskell because it exposes the lazy evaluation order. We
+argue that this drawback is not as severe as it may seem, and in some
+cases is an advantage.</p>
+<p>The design focusses on : our debugger is intended
+to work on all programs that can be compiled with GHC, and without
+requiring the programmer to jump through additional hoops to debug
+their program. The debugger has a novel approach for reconstructing
+the type of runtime values in a polymorphic context. Our
+implementation is light on complexity, and was integrated into GHC
+without significant upheaval.</p>
 </div>
 
       </div>

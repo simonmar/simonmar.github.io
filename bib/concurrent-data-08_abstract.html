@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -111,9 +111,21 @@
   <h1 class="page-title">Comparing the performance of concurrent linked-list implementations in {H}askell</h1>
   <p>(Martin Sulzmann, Edmund S. L. Lam, Simon Marlow) <em>DAMP 2009: Workshop on Declarative Aspects of Multicore Programming</em>, Savannah, Georgia, USA, 2009</p>
 <p><a href="http://simonmar.github.io/bib/papers/concurrent-data.pdf">Full Paper</a> | <a href="concurrent-data-08.bib">BibTeX</a></p>
-<p>Haskell has a rich set of synchronization primitives for implementing shared-state concurrency abstractions, ranging from the very high level (Software Transactional Memory) to the very low level (mutable variables with atomic read-modify-write).</p>
-<p>In this paper we perform a systematic comparison of these different concurrent programming models by using them to implement the same abstraction: a concurrent linked-list. Our results are somewhat surprising: there is a full two orders of magnitude difference in performance between the slowest and the fastest implementation. Our analysis of the performance results gives new insights into the relative performance of the programming models and their implementation.</p>
-<p>Finally, we suggest the addition of a single primitive which in our experiments improves the performance of one of the STM-based implementations by more than a factor of 7.</p>
+<p>Haskell has a rich set of synchronization primitives for implementing
+shared-state concurrency abstractions, ranging from the very high
+level (Software Transactional Memory) to the very low level (mutable
+variables with atomic read-modify-write).</p>
+<p>In this paper we perform a systematic comparison of these different
+concurrent programming models by using them to implement the same
+abstraction: a concurrent linked-list. Our results are somewhat
+surprising: there is a full two orders of magnitude difference in
+performance between the slowest and the fastest implementation. Our
+analysis of the performance results gives new insights into the
+relative performance of the programming models and their
+implementation.</p>
+<p>Finally, we suggest the addition of a single primitive which in our
+experiments improves the performance of one of the STM-based
+implementations by more than a factor of 7.</p>
 </div>
 
       </div>

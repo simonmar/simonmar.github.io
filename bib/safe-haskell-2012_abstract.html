@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -111,7 +111,22 @@
   <h1 class="page-title">Safe {H}askell</h1>
   <p>(David Terei, David Mazières, Simon Marlow, Simon Peyton Jones) <em>Haskell ’12: Proceedings of the Fifth ACM SIGPLAN Symposium on Haskell</em>, Copenhagen, Denmark, ACM, 2012</p>
 <p><a href="http://simonmar.github.io/bib/papers/safe-haskell.pdf">Full Paper</a> | <a href="safe-haskell-2012.bib">BibTeX</a></p>
-<p>Though Haskell is predominantly type-safe, implementations contain a few loopholes through which code can bypass typing and module encapsulation. This paper presents Safe Haskell, a language extension that closes these loopholes. Safe Haskell makes it possible to confine and safely execute untrusted, possibly malicious code. By strictly enforcing types, Safe Haskell allows a variety of different policies from API sandboxing to information-flow control to be implemented easily as monads. Safe Haskell is aimed to be as unobtrusive as possible. It enforces properties that programmers tend to meet already by convention. We describe the design of Safe Haskell and an implementation (currently shipping with GHC) that infers safety for code that lies in a safe subset of the language. We use Safe Haskell to implement an online Haskell interpreter that can securely execute arbitrary untrusted code with no overhead. The use of Safe Haskell greatly simplifies this task and allows the use of a large body of existing code and tools.</p>
+<p>Though Haskell is predominantly type-safe, implementations contain a
+few loopholes through which code can bypass typing and module
+encapsulation. This paper presents Safe Haskell, a language
+extension that closes these loopholes. Safe Haskell makes it possible
+to confine and safely execute untrusted, possibly malicious code. By
+strictly enforcing types, Safe Haskell allows a variety of different
+policies from API sandboxing to information-flow control to be
+implemented easily as monads. Safe Haskell is aimed to be as
+unobtrusive as possible. It enforces properties that programmers tend
+to meet already by convention. We describe the design of Safe Haskell
+and an implementation (currently shipping with GHC) that infers safety
+for code that lies in a safe subset of the language. We use Safe
+Haskell to implement an online Haskell interpreter that can securely
+execute arbitrary untrusted code with no overhead. The use of Safe
+Haskell greatly simplifies this task and allows the use of a large
+body of existing code and tools.</p>
 </div>
 
       </div>

@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -110,32 +110,71 @@
         <div class="post">
   <h1 class="post-title">Fixing 17 space leaks in GHCi, and keeping them fixed</h1>
   <span class="post-date">June 20, 2018</span>
-  <p>In this post I want to tackle a couple of problems that have irritated me from time to time when working with Haskell.</p>
+  <p>In this post I want to tackle a couple of problems that have irritated
+me from time to time when working with Haskell.</p>
 <ul>
-<li><p><strong>GHC provides some powerful tools for debugging space leaks, but sometimes they’re not enough</strong>. The heap profiler shows you what’s in the heap, but it doesn’t provide detailed visibility into the chain of references that cause a particular data structure to be retained. Retainer profiling was supposed to help with this, but in practice it’s pretty hard to extract the signal you need - retainer profiling will show you one relationship at a time, but you want to see the whole chain of references.</p></li>
-<li><p><strong>Once you’ve fixed a space leak, how can you write a regression test for it</strong>? Sometimes you can make a test case that will use <code>O(n)</code> memory if it leaks instead of <code>O(1)</code>, and then it’s straightforward. But what if your leak is only a constant factor?</p></li>
+<li><p><strong>GHC provides some powerful tools for debugging space leaks, but
+sometimes they’re not enough</strong>. The heap profiler shows you what’s in
+the heap, but it doesn’t provide detailed visibility into the chain of
+references that cause a particular data structure to be
+retained. Retainer profiling was supposed to help with this, but in
+practice it’s pretty hard to extract the signal you need - retainer
+profiling will show you one relationship at a time, but you want to
+see the whole chain of references.</p></li>
+<li><p><strong>Once you’ve fixed a space leak, how can you write a regression test
+for it</strong>? Sometimes you can make a test case that will use <code>O(n)</code>
+memory if it leaks instead of <code>O(1)</code>, and then it’s
+straightforward. But what if your leak is only a constant factor?</p></li>
 </ul>
-<p>We recently noticed an interesting space leak in GHCi. If we loaded a set of modules, and then loaded the same set of modules again, GHCi would need twice as much memory as just loading the modules once. That’s not supposed to happen - GHCi should release whatever data it was holding about the first set of modules when loading a new set. What’s more, after further investigation we found that this effect wasn’t repeated the <em>third</em> time we loaded the modules; only one extra set of modules was being retained.</p>
-<div class="figure">
-<img src="../images/ghci-leak.png" />
-
-</div>
-<p>Conventional methods for finding the space leak were not helpful in this case. GHCi is a complex beast, and just reproducing the problem proved difficult. So I decided to try a trick I’d thought about for a long time but never actually put into practice: using GHC’s <em>weak pointers</em> to detect data that should be dead, but isn’t.</p>
+<p>We recently noticed an interesting space leak in GHCi. If we loaded a
+set of modules, and then loaded the same set of modules again, GHCi
+would need twice as much memory as just loading the modules
+once. That’s not supposed to happen - GHCi should release whatever
+data it was holding about the first set of modules when loading a new
+set. What’s more, after further investigation we found that this
+effect wasn’t repeated the <em>third</em> time we loaded the modules; only
+one extra set of modules was being retained.</p>
+<p><img src="../images/ghci-leak.png" /></p>
+<p>Conventional methods for finding the space leak were not helpful in
+this case. GHCi is a complex beast, and just reproducing the problem
+proved difficult. So I decided to try a trick I’d thought about for a
+long time but never actually put into practice: using GHC’s <em>weak
+pointers</em> to detect data that should be dead, but isn’t.</p>
 <h2 id="weak-pointers-can-detect-space-leaks">Weak pointers can detect space leaks</h2>
-<p>The <a href="http://hackage.haskell.org/package/base-4.11.1.0/docs/System-Mem-Weak.html">System.Mem.Weak</a> library provides operations for creating “weak” pointers. A weak pointer is a reference to an object that doesn’t keep the object alive. If we have a weak pointer, we can attempt to <em>dereference</em> it, which will either succeed and return the value it points to, or it will fail in the event that the value has been garbage collected. So a weak pointer can detect when things are garbage collected, which is exactly what we want for detecting space leaks.</p>
+<p>The <a href="http://hackage.haskell.org/package/base-4.11.1.0/docs/System-Mem-Weak.html">System.Mem.Weak</a>
+library provides operations for creating “weak” pointers. A weak
+pointer is a reference to an object that doesn’t keep the object
+alive. If we have a weak pointer, we can attempt to <em>dereference</em> it,
+which will either succeed and return the value it points to, or it
+will fail in the event that the value has been garbage collected. So
+a weak pointer can detect when things are garbage collected, which is
+exactly what we want for detecting space leaks.</p>
 <p>Here’s the idea:</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li>Call <code>mkWeakPtr v Nothing</code> where <code>v</code> is the value you’re interested in.</li>
 <li>Wait until you believe <code>v</code> should be garbage.</li>
 <li>Call <code>System.Mem.performGC</code> to force a full GC.</li>
 <li>Call <code>System.Mem.Weak.deRefWeak</code> on the weak pointer to see if <code>v</code> is alive or not.</li>
 </ol>
-<p>Here’s <a href="https://phabricator.haskell.org/D4658">how I implemented this for GHCi</a>. One thing to note is that just because <code>v</code> was garbage-collected doesn’t mean that there aren’t still pieces of <code>v</code> being retained, so you might need to have several weak pointers to different components of <code>v</code>, like I did in the GHC patch. These really did detect multiple different space leaks.</p>
-<p>This patch reliably detected leaks in trivial examples, including many of the tests in GHCi’s own test suite. That meant we had a way to reproduce the problem without having to use unpredictable measurement methods like memory usage or heap profiles. This made it much easier to iterate on finding the problems.</p>
+<p>Here’s <a href="https://phabricator.haskell.org/D4658">how I
+implemented this for GHCi</a>. One thing to note is that just because
+<code>v</code> was garbage-collected doesn’t mean that there aren’t still pieces
+of <code>v</code> being retained, so you might need to have several weak pointers
+to different components of <code>v</code>, like I did in the GHC patch. These
+really did detect multiple different space leaks.</p>
+<p>This patch reliably detected leaks in trivial examples, including many
+of the tests in GHCi’s own test suite. That meant we had a way to
+reproduce the problem without having to use unpredictable measurement
+methods like memory usage or heap profiles. This made it much easier
+to iterate on finding the problems.</p>
 <h2 id="back-to-the-space-leaks-in-ghci">Back to the space leaks in GHCi</h2>
-<p>That still leaves us with the problem of how to actually diagnose the leak and find the cause. Here the techniques are going to get a bit more grungy: we’ll use <code>gdb</code> to poke around in the heap at runtime, along with some custom utilities in the GHC runtime to help us search through the heap.</p>
+<p>That still leaves us with the problem of how to actually diagnose the
+leak and find the cause. Here the techniques are going to get a bit
+more grungy: we’ll use <code>gdb</code> to poke around in the heap at runtime,
+along with some custom utilities in the GHC runtime to help us search
+through the heap.</p>
 <p>To set things up for debugging, we need to</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li>Compile GHC with <code>-g</code> and <code>-debug</code>, to add debugging info to the binary and debugging functionality to the runtime, respectively.</li>
 <li>load up GHCi in gdb (that’s a bit fiddly and I won’t go into the details here),</li>
 <li>Set things up to reproduce the test case.</li>
@@ -144,12 +183,17 @@
 Ok, no modules loaded.
 -fghci-leak-check: Linkable is still alive!
 Prelude&gt;</code></pre>
-<p>The <code>-fghci-leak-check</code> code just spat out a message when it detected a leak. We can <code>Ctrl-C</code> to break into <code>gdb</code>:</p>
+<p>The <code>-fghci-leak-check</code> code just spat out a message when it
+detected a leak. We can <code>Ctrl-C</code> to break into <code>gdb</code>:</p>
 <pre><code>Program received signal SIGINT, Interrupt.
 0x00007ffff17c05b3 in __select_nocancel ()
     at ../sysdeps/unix/syscall-template.S:84
 84	../sysdeps/unix/syscall-template.S: No such file or directory.</code></pre>
-<p>Next I’m going to search the heap for instances of the <code>LM</code> constructor, which corresponds to the <code>Linkable</code> type that the leak detector found. There should be none of these alive, because the <code>:l</code> command tells GHCi to unload everything, so any <code>LM</code> constructors we find must be leaking:</p>
+<p>Next I’m going to search the heap for instances of the <code>LM</code>
+constructor, which corresponds to the <code>Linkable</code> type that the leak
+detector found. There should be none of these alive, because the <code>:l</code>
+command tells GHCi to unload everything, so any <code>LM</code>
+constructors we find must be leaking:</p>
 <pre><code>(gdb) p findPtr(ghc_HscTypes_LM_con_info,1)
 0x4201a073d8 = ghc:HscTypes.LM(0x4201a074b0, 0x4201a074c8, 0x4201a074e2)
 --&gt;
@@ -158,9 +202,20 @@ Prelude&gt;</code></pre>
 0x42017e2088 = ghc-prim:GHC.Types.:(0x4201a073d9, 0x7ffff2e9f679)
 0x42017e2ae0 = ghc-prim:GHC.Types.:(0x4201a073d9, 0x7ffff2e9f679)
 $1 = void</code></pre>
-<p>The <code>findPtr</code> function comes from the RTS, it’s a function designed specifically for searching through the heap for things from inside <code>gdb</code>. I asked it to search for <code>ghc_HscTypes_LM_con_info</code>, which is the info pointer for the <code>LM</code> constructor - every instance of that constructor will have this pointer as its first word.</p>
-<p>The <code>findPtr</code> function doesn’t just search for objects in the heap, it also attempts to find the object’s parent, and will continue tracing back through the chain of ancestors until it finds multiple parents.</p>
-<p>In this case, it found a single <code>LM</code> constructor, which had four parents: two <code>WEAK</code> objects and two <code>ghc-prim:GHC.Types.:</code> objects, which are the list constructor <code>(:)</code>. The <code>WEAK</code> objects we know about: those are the weak pointers used by the leak-checking code. So we need to trace the parents of the other objects, which we can do with another call to <code>findPtr</code>:</p>
+<p>The <code>findPtr</code> function comes from the RTS, it’s a function designed
+specifically for searching through the heap for things from inside
+<code>gdb</code>. I asked it to search for <code>ghc_HscTypes_LM_con_info</code>,
+which is the info pointer for the <code>LM</code> constructor - every
+instance of that constructor will have this pointer as its first word.</p>
+<p>The <code>findPtr</code> function doesn’t just search for objects in the heap, it
+also attempts to find the object’s parent, and will continue tracing
+back through the chain of ancestors until it finds multiple parents.</p>
+<p>In this case, it found a single <code>LM</code> constructor, which had four
+parents: two <code>WEAK</code> objects and two <code>ghc-prim:GHC.Types.:</code> objects,
+which are the list constructor <code>(:)</code>. The <code>WEAK</code> objects we know
+about: those are the weak pointers used by the leak-checking code. So
+we need to trace the parents of the other objects, which we can do with
+another call to <code>findPtr</code>:</p>
 <pre><code>(gdb) p findPtr(0x42017e2088,1)
 0x42016e9c08 = ghc:Linker.PersistentLinkerState(0x42017e2061, 0x7ffff3c2bc63, 0x42017e208a, 0x7ffff2e9f679, 0x42016e974a, 0x7ffff2e9f679)
 --&gt;
@@ -179,15 +234,27 @@ $1 = void</code></pre>
 0x4200ec6b80 = base:GHC.STRef.STRef(0x42016e0500)
 --&gt;
 $2 = void</code></pre>
-<p>This time we traced through several objects, until we came to an <code>STRef</code>, and <code>findPtr</code> found no further parents. Perhaps the next parent is a CAF (a top-level thunk) which <code>findPtr</code> won’t find because it only searches the heap. Anyway, in the chain we have two <code>PersistentLinkerState</code> objects, and some <code>THUNK</code>s - it looks like perhaps we’re holding onto an old version of the <code>PersistentLinkerState</code>, which contains the leaking <code>Linkable</code> object.</p>
+<p>This time we traced through several objects, until we came to an
+<code>STRef</code>, and <code>findPtr</code> found no further parents. Perhaps the next
+parent is a CAF (a top-level thunk) which <code>findPtr</code> won’t find because
+it only searches the heap. Anyway, in the chain we have two
+<code>PersistentLinkerState</code> objects, and some <code>THUNK</code>s - it looks like
+perhaps we’re holding onto an old version of the
+<code>PersistentLinkerState</code>, which contains the leaking <code>Linkable</code> object.</p>
 <p>Let’s pick one <code>THUNK</code> and take a closer look.</p>
 <pre><code>(gdb) p4 0x42016e9728
 0x42016e9740:	0x42016e9c09
 0x42016e9738:	0x42016e9c41
 0x42016e9730:	0x0
 0x42016e9728:	0x7ffff74790c0 &lt;sorW_info&gt;</code></pre>
-<p>The <code>p4</code> command is just a macro for dumping memory (you can get these macros from <a href="https://ghc.haskell.org/trac/ghc/wiki/Debugging/CompiledCode">here</a>).</p>
-<p>The header of the object is <code>0x7ffff74790c0 &lt;sorW_info&gt;</code>, which is just a compiler-generated symbol. How can we find out what code this object corresponds to? Fortunately, GHC’s new <code>-g</code> option generates DWARF debugging information which <code>gdb</code> can understand, and because we compiled GHC itself with <code>-g</code> we can get <code>gdb</code> to tell us what code this address corresponds to:</p>
+<p>The <code>p4</code> command is just a macro for dumping memory (you can get these
+macros from <a href="https://ghc.haskell.org/trac/ghc/wiki/Debugging/CompiledCode">here</a>).</p>
+<p>The header of the object is <code>0x7ffff74790c0 &lt;sorW_info&gt;</code>, which is just a
+compiler-generated symbol. How can we find out what code this object
+corresponds to? Fortunately, GHC’s new <code>-g</code> option generates DWARF
+debugging information which <code>gdb</code> can understand, and because we
+compiled GHC itself with <code>-g</code> we can get <code>gdb</code> to tell us what code
+this address corresponds to:</p>
 <pre><code>(gdb) list *0x7ffff74790c0
 0x7ffff74790c0 is in sorW_info (compiler/ghci/Linker.hs:1129).
 1124
@@ -200,21 +267,47 @@ $2 = void</code></pre>
 1131	                      objs_loaded = remaining_objs_loaded }
 1132	
 1133	  return new_pls</code></pre>
-<p>In this case it told us that the object corresponds to line 1129 of <code>compiler/ghci/Linker.hs</code>. This is all part of the function <code>unload_wkr</code>, which is part of the code for unloading compiled code in GHCi. It looks like we’re on the right track.</p>
-<p>Now, <code>-g</code> isn’t perfect - the line it pointed to isn’t actually a thunk. But it’s close: the line it points to refers to <code>closure_env'</code> which is defined on line 1126, and it is indeed a thunk. Moreover, we can see that it has a reference to <code>pls</code>, which is the original <code>PersistentLinkerState</code> before the unloading operation.</p>
-<p>To avoid this leak, we could pattern-match on <code>pls</code> eagerly rather than doing the lazy record selection <code>(closure_env pls)</code> in the definition of <code>closure_env'</code>. That’s exactly what I did to fix this particular leak, as you can see in <a href="https://phabricator.haskell.org/D4872">the patch that fixes it</a>.</p>
-<p>Fixing one leak isn’t necessarily enough: the data structure might be retained in multiple different ways, and it won’t be garbage collected until all the references are squashed. In total I found</p>
+<p>In this case it told us that the object corresponds to line 1129 of
+<code>compiler/ghci/Linker.hs</code>. This is all part of the function
+<code>unload_wkr</code>, which is part of the code for unloading compiled
+code in GHCi. It looks like we’re on the right track.</p>
+<p>Now, <code>-g</code> isn’t perfect - the line it pointed to isn’t actually a
+thunk. But it’s close: the line it points to refers to <code>closure_env'</code> which is defined on line 1126, and it is
+indeed a thunk. Moreover, we can see that it has a reference to <code>pls</code>,
+which is the original <code>PersistentLinkerState</code> before the unloading
+operation.</p>
+<p>To avoid this leak, we could pattern-match on <code>pls</code> eagerly rather
+than doing the lazy record selection <code>(closure_env pls)</code> in the
+definition of <code>closure_env'</code>. That’s exactly what I did to fix this
+particular leak, as you can see in <a href="https://phabricator.haskell.org/D4872">the patch that fixes
+it</a>.</p>
+<p>Fixing one leak isn’t necessarily enough: the data structure might be
+retained in multiple different ways, and it won’t be garbage collected
+until all the references are squashed. In total I found</p>
 <ul>
-<li><a href="https://phabricator.haskell.org/D4659">7 leaks in GHCi</a> that were collectively responsible for the original leak, and</li>
-<li><a href="https://phabricator.haskell.org/D4872">A further 10 leaks</a> that only appeared when GHC was compiled without optimisation. (It seems that GHC’s optimiser is pretty good at fixing space leaks by itself)</li>
+<li><a href="https://phabricator.haskell.org/D4659">7 leaks in GHCi</a> that were
+collectively responsible for the original leak, and</li>
+<li><a href="https://phabricator.haskell.org/D4872">A further 10 leaks</a>
+that only appeared when GHC was compiled without optimisation. (It
+seems that GHC’s optimiser is pretty good at fixing space leaks by
+itself)</li>
 </ul>
-<p>You might ask how anyone could have found these without undergoing this complicated debugging process. And whether there are more lurking that we haven’t found yet. These are really good questions, and I don’t have a good answer for either. But at least we’re in a better place now:</p>
+<p>You might ask how anyone could have found these without undergoing
+this complicated debugging process. And whether there are more lurking
+that we haven’t found yet. These are really good questions, and I
+don’t have a good answer for either. But at least we’re in a better
+place now:</p>
 <ul>
-<li>The leaks are fixed, and we have a regression test to prevent them being reintroduced.</li>
-<li>If you happen to write a patch that introduces a leak, you’ll know what the patch is, so you have a head start in debugging it.</li>
+<li>The leaks are fixed, and we have a regression test to prevent them
+being reintroduced.</li>
+<li>If you happen to write a patch that introduces a leak, you’ll
+know what the patch is, so you have a head start in debugging it.</li>
 </ul>
 <h2 id="could-we-do-better">Could we do better?</h2>
-<p>Obviously this is all a bit painful and we could definitely build better tools to make this process easier. Perhaps something based on <code>heap-view</code> which was <a href="https://phabricator.haskell.org/D3055">recently added to GHC</a>? I’d love to see someone tackle this.</p>
+<p>Obviously this is all a bit painful and we could definitely build
+better tools to make this process easier. Perhaps something based on
+<code>heap-view</code> which was <a href="https://phabricator.haskell.org/D3055">recently added to
+GHC</a>? I’d love to see someone tackle this.</p>
 </div>
 
       </div>

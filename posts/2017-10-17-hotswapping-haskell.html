@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -110,7 +110,9 @@
         <div class="post">
   <h1 class="post-title">Hotswapping Haskell</h1>
   <span class="post-date">October 17, 2017</span>
-  <p><em>This is a guest post by <a href="https://github.com/JonCoens">Jon Coens</a>. Jon worked on the Haxl project since the beginning in 2013, and nowadays he works on broadening Haskell use within Facebook.</em></p>
+  <p><em>This is a guest post by <a href="https://github.com/JonCoens">Jon
+Coens</a>. Jon worked on the Haxl project since the beginning in
+2013, and nowadays he works on broadening Haskell use within Facebook.</em></p>
 <p>From developing code through deployment, Facebook needs to move fast. This is especially true for one of our <a href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">anti-abuse systems</a> that deploys hundreds of code changes every day. Releasing a large application (hundreds of Kloc) that many times a day presents plenty of intriguing challenges. Haskell’s strict type system means we’re able to confidently push new code knowing that we can’t crash the server, but getting those changes out to many thousands of machines as fast as possible requires some ingenuity.</p>
 <p>Given the application size and deployment speed constraints:</p>
 <ul>
@@ -139,7 +141,7 @@
 </ul>
 <p>This minimizes the amount of time between making a code change and having it running in an efficient production environment. It only rebuilds the minimum set of code, deploys a much smaller file to each server, and keeps the server running through each update.</p>
 <p>Not every module or application can follow this update model as there are some crucial constraints to consider when figuring out what can go into the shared object.</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li>The symbol API boundaries into and out of the shared object must remain constant</li>
 <li>The main binary cannot persist any reference to code or data originating from the shared object, because that will prevent the GC from unloading the object.</li>
 </ol>
@@ -154,7 +156,8 @@
 <li><p><a href="https://github.com/fbsamples/ghc-hotswap/tree/master/ghc-hotswap-demo"><strong>ghc-hotswap-demo</strong></a> - User-written application utilizing the above</p></li>
 </ul>
 <h3 id="loading-and-extracting-from-the-shared-object">Loading and extracting from the shared object</h3>
-<p>Let’s start with bringing in a new shared object, the guts of which can be found in <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap/GHC/Hotswap.hs">loadNewSO</a>. It makes heavy use of the <a href="https://github.com/ghc/ghc/blob/master/libraries/ghci/GHCi/ObjLink.hs">GHCi.ObjLink</a> library. We need the name of an exported symbol to lookup inside the shared object (<code>symName</code>) and the file path to where the shared object lives (<code>newSO</code>). With these, we can return an instance of some data that originates from that shared object.</p>
+<p>Let’s start with bringing in a new shared object, the guts of which can be found in <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap/GHC/Hotswap.hs">loadNewSO</a>. It makes heavy use of the <a href="https://github.com/ghc/ghc/blob/master/libraries/ghci/GHCi/ObjLink.hs">GHCi.ObjLink</a> library.
+We need the name of an exported symbol to lookup inside the shared object (<code>symName</code>) and the file path to where the shared object lives (<code>newSO</code>). With these, we can return an instance of some data that originates from that shared object.</p>
 <pre><code>initObjLinker DontRetainCAFs</code></pre>
 <p>GHCi’s linker needs to be initialized before use, and fortunately the call is idempotent. “DontRetainCAFs” tells the linker and GC not to retain CAFs (Constant Applicative Forms, i.e. top-level values) in the shared object. GHCi normally retains all CAFs as the user can type an expression that refers to anything at all, but for hot-swapping this would prevent the object from being unloaded as we would have references into the object from the heap-resident CAFs.</p>
 <pre><code>loadObj newSO
@@ -175,7 +178,8 @@ return h</code></pre>
 <p>Assuming everything has gone well, we purge GHCi’s symbol table of all symbols defined from our shared object and then return the value we retrieved. Purging the symbols makes room for the next shared object to come in and resolve successfully without fully unloading the shared object that we’re actively holding references to. We could tell GHCi to unload the shared object at this point, but this would cause the GC to aggressively crawl the entire shared object every single time, which is a lot of unnecessary work. Purging retains the code in the process to make the GC’s work lighter while making room for the next shared object. See <em>Safely Transition Updates</em> for when to unload the shared object.</p>
 <p>The project that defines the code for the shared object must be generated in a relocatable fashion. It must be configured with the <code>—enable-library-for-ghci</code> flag, otherwise <code>loadObj</code> and <code>resolveObj</code> will throw a fit.</p>
 <h3 id="defining-the-shared-objects-api">Defining the shared object’s API</h3>
-<p>During compilation, the function names from code turn into quasi-human-readable symbol names. Ensuring you look up the correct symbol name from a shared object can become brittle if you rely on hardcoded munged names. To mitigate this, we define a single data type to house all the symbols we want to expose to the main application, and export a ccall using Haskell’s Foreign library. This guarantees we can export a particular symbol with a name we control. Placing all our data behind a single symbol (that both the shared object and main binary can depend on), we reduce the coupling to only a couple of points.</p>
+<p>During compilation, the function names from code turn into quasi-human-readable symbol names. Ensuring you look up the correct symbol name from a shared object can become brittle if you rely on hardcoded munged names. To mitigate this, we define a single data type to house all the symbols we want to expose to the main application, and export a ccall using Haskell’s Foreign library. This guarantees we can export a particular symbol with a name we control.
+Placing all our data behind a single symbol (that both the shared object and main binary can depend on), we reduce the coupling to only a couple of points.</p>
 <p>Let’s look at <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap-types/Types.hs">Types.hs</a>.</p>
 <pre><code>data SOHandles = SOHandles
   { someData :: Text
@@ -187,7 +191,8 @@ return h</code></pre>
 <pre><code>foreign import ccall &quot;dynamic&quot;
   callExport :: FunPtr SOHandleExport -&gt; SOHandleExport</code></pre>
 <p>Here we invoke Haskell’s FFI to generate a function that calls a function pointer to our export function as an actual Haskell function. The “dynamic” parameter to ccall <a href="https://www.haskell.org/onlinereport/haskell2010/haskellch8.html">does exactly this</a>. We saw using this earlier when loading in a shared object.</p>
-<p>Next let’s look at code for the <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap-so/SO/Handles.hs">shared object itself</a>. Note that we depend on and import the <code>Types</code> module defined in <code>ghc-hotswap-types</code>.</p>
+<p>Next let’s look at code for the <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap-so/SO/Handles.hs">shared object itself</a>.
+Note that we depend on and import the <code>Types</code> module defined in <code>ghc-hotswap-types</code>.</p>
 <pre><code>foreign export ccall &quot;hs_soHandles&quot;
   hsNewSOHandle :: SOHandleExport</code></pre>
 <p>This uses the FFI to explicitly export a Haskell function called <code>hsNewSOHandle</code> as a symbol named <code>“hs_soHandles”</code>. This is the function our main binary is going to end up calling, so set its type to our export function.</p>
@@ -221,7 +226,7 @@ return h</code></pre>
 <li><p>If it contains data where the datatype is defined in the shared object (rather than in the packages that the object depends on, which are statically linked), then again we have a reference from the heap-resident data into the shared object, which will cause retention.</p></li>
 </ul>
 <p>So to avoid retention while having mutable persistent data, the rules of thumb are:</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li><p><code>rnf</code> everything before writing into the persistent <code>IORef</code>, and ensure that any manual <code>NFData</code> instances don’t lie.</p></li>
 <li><p>Don’t store values that contain functions</p></li>
 <li><p>Don’t store values that use datatypes defined in the shared object</p></li>

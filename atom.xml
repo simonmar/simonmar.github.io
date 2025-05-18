@@ -6,7 +6,9 @@
     <id>https://simonmar.github.io/atom.xml</id>
     <author>
         <name>Simon Marlow</name>
+        
         <email>marlowsd@gmail.com</email>
+        
     </author>
     <updated>2018-06-22T00:00:00Z</updated>
     <entry>
@@ -18,12 +20,25 @@
     <summary type="html"><![CDATA[<div class="post">
   <h1 class="post-title">Rethinking Static Reference Tables in GHC</h1>
   <span class="post-date">June 22, 2018</span>
-  <p>It seems rare these days to be able to make an improvement that’s unambiguously better on every axis. Most changes involve a tradeoff of some kind. With a compiler, the tradeoff is often between performance and code size (e.g. specialising code to make it faster leaves us with more code), or between performance and complexity (e.g. adding a fancy new optimisation), or between compile-time performance and runtime performance.</p>
-<p>Recently I was lucky enough to be able to finish a project I’ve been working on intermittently in GHC for several years, and the result was satisfyingly better on just about every axis.</p>
+  <p>It seems rare these days to be able to make an improvement that’s
+unambiguously better on every axis. Most changes involve a tradeoff
+of some kind. With a compiler, the tradeoff is often between
+performance and code size (e.g. specialising code to make it faster
+leaves us with more code), or between performance and complexity
+(e.g. adding a fancy new optimisation), or between compile-time
+performance and runtime performance.</p>
+<p>Recently I was lucky enough to be able to finish a project I’ve been
+working on intermittently in GHC for several years, and the result was
+satisfyingly better on just about every axis.</p>
 <ul>
-<li><p>Code size: overall binary sizes are reduced by ~5% for large programs, ~3% for smaller programs.</p></li>
-<li><p>Runtime performance: no measurable change on benchmarks, although some really bad corner cases where the old code performed terribly should now be gone.</p></li>
-<li><p>Complexity: some complex representations were removed from the runtime, making GC simpler, and the compiler itself also became simpler.</p></li>
+<li><p>Code size: overall binary sizes are reduced by ~5% for large
+programs, ~3% for smaller programs.</p></li>
+<li><p>Runtime performance: no measurable change on benchmarks, although
+some really bad corner cases where the old code performed terribly
+should now be gone.</p></li>
+<li><p>Complexity: some complex representations were removed from the
+runtime, making GC simpler, and the compiler itself also became
+simpler.</p></li>
 <li><p>Compile-time performance: slightly improved (0.2%).</p></li>
 </ul>
 <p>To explain what the change is, first we’ll need some background.</p>
@@ -33,79 +48,110 @@
 myMap = HashMap.fromList [
   -- lots of data
   ]</code></pre>
-<p>Now, <code>myMap</code> is represented in the compiled program by a static closure that looks like this:</p>
-<div class="figure">
-<img src="/images/static-closure.png" />
-
-</div>
-<p>When the program demands the value of <code>myMap</code> for the first time, the representation will change to this:</p>
-<div class="figure">
-<img src="/images/evaluated-static-closure.png" />
-
-</div>
-<p>At this point, we have a reference from the original static closure, which is part of the compiled program, into the dynamic heap. The garbage collector needs to know about this reference, because it has to treat the value of <code>myMap</code> as live data, and ensure that this reference remains valid.</p>
-<p>How could we do that? One way would be to just keep all the CAFs alive for ever. We could keep a list of them and use the list as a source of roots in the GC. That would work, but we’d never be able to garbage-collect any top-level data. Back in the distant past GHC used to work this way, but it interacted badly with the full-laziness optimisation which likes to float things out to the top level - we had to be really careful not to float things out as CAFs because the data would be retained for ever.</p>
-<p>Or, we could track the liveness of CAFs properly, like we do for other data. But how can we find all the references to <code>myMap</code>? The problem with top-level closures is that their references appear in <em>code</em>, not just <em>data</em>. For example, somewhere else in our program we might have</p>
+<p>Now, <code>myMap</code> is represented in the compiled program by a static
+closure that looks like this:</p>
+<p><img src="/images/static-closure.png" /></p>
+<p>When the program demands the value of <code>myMap</code> for the first time, the
+representation will change to this:</p>
+<p><img src="/images/evaluated-static-closure.png" /></p>
+<p>At this point, we have a reference from the original static closure,
+which is part of the compiled program, into the dynamic heap. The
+garbage collector needs to know about this reference, because it has
+to treat the value of <code>myMap</code> as live data, and ensure that this
+reference remains valid.</p>
+<p>How could we do that? One way would be to just keep all the CAFs
+alive for ever. We could keep a list of them and use the list as a
+source of roots in the GC. That would work, but we’d never be able to
+garbage-collect any top-level data. Back in the distant past GHC used
+to work this way, but it interacted badly with the full-laziness
+optimisation which likes to float things out to the top level - we had
+to be really careful not to float things out as CAFs because the data
+would be retained for ever.</p>
+<p>Or, we could track the liveness of CAFs properly, like we do for other
+data. But how can we find all the references to <code>myMap</code>? The problem
+with top-level closures is that their references appear in <em>code</em>, not
+just <em>data</em>. For example, somewhere else in our program we might have</p>
 <pre><code>myLookup :: String -&gt; Maybe Int
 myLookup name = HashMap.lookup name myMap</code></pre>
-<p>and in the compiled code for <code>myLookup</code> will be a reference to <code>myMap</code>.</p>
-<p>To be able to know when we should keep <code>myMap</code> alive, the garbage collector has to traverse all the references from code as well as data.</p>
-<p>Of course, actually searching through the code for symbols isn’t practical, so GHC produces an additional data structure for all the code it compiles, called the Static Reference Table (SRT). The SRT for <code>myLookup</code> will contain a reference to <code>myMap</code>.</p>
-<p>The naive way to do this would be to just have a table of all the static references for each code block. But it turns out that there’s quite a lot of opportunities for sharing between SRTs - lots of code blocks refer to the same things - so it makes sense to try to use a more optimised representation.</p>
+<p>and in the compiled code for <code>myLookup</code> will be a reference to
+<code>myMap</code>.</p>
+<p>To be able to know when we should keep <code>myMap</code> alive, the garbage
+collector has to traverse all the references from code as well as
+data.</p>
+<p>Of course, actually searching through the code for symbols isn’t
+practical, so GHC produces an additional data structure for all the
+code it compiles, called the Static Reference Table (SRT). The SRT
+for <code>myLookup</code> will contain a reference to <code>myMap</code>.</p>
+<p>The naive way to do this would be to just have a table of all the
+static references for each code block. But it turns out that there’s
+quite a lot of opportunities for sharing between SRTs - lots of code
+blocks refer to the same things - so it makes sense to try to use a
+more optimised representation.</p>
 <p>The representation that GHC 8.4 and earlier used was this:</p>
-<div class="figure">
-<img src="/images/old-srt.png" />
-
-</div>
-<p>All the static references in a module were collected together into a single table (<code>ThisModule_srt</code> in the diagram), and every static closure selects the entries it needs with a combination of a pointer (<code>srt</code>) into the table and a bitmap (<code>srt_bitmap</code>).</p>
+<p><img src="/images/old-srt.png" /></p>
+<p>All the static references in a module were collected together into a
+single table (<code>ThisModule_srt</code> in the diagram), and every static
+closure selects the entries it needs with a combination of a pointer
+(<code>srt</code>) into the table and a bitmap (<code>srt_bitmap</code>).</p>
 <p>This had a few problems:</p>
 <ul>
-<li><p>On a 64-bit machine we need at least 96 bits for the SRT in every static closure and continuation that has at least one static reference: 64 bits to point to the table and a 32-bit bitmap.</p></li>
-<li><p>Sometimes the heuristics in the compiler for generating the table worked really badly. I observed some cases with particularly large modules where we generated an SRT containing two entries that were thousands of entries apart in the table, which required a huge bitmap.</p></li>
-<li><p>There was complex code in the RTS for traversing these bitmaps, and complex code in the compiler to generate this table that nobody really understood.</p></li>
+<li><p>On a 64-bit machine we need at least 96 bits for the SRT in every
+static closure and continuation that has at least one static
+reference: 64 bits to point to the table and a 32-bit bitmap.</p></li>
+<li><p>Sometimes the heuristics in the compiler for generating the table
+worked really badly. I observed some cases with particularly large
+modules where we generated an SRT containing two entries that were
+thousands of entries apart in the table, which required a huge
+bitmap.</p></li>
+<li><p>There was complex code in the RTS for traversing these bitmaps, and
+complex code in the compiler to generate this table that nobody
+really understood.</p></li>
 </ul>
 <h2 id="the-shiny-new-way">The shiny new way</h2>
-<p>The basic idea is quite straightforward: instead of the single table and bitmap representation, each code block that needs an SRT will have an associated SRT object, like this:</p>
-<div class="figure">
-<img src="/images/new-srt.png" />
-
-</div>
-<p>Firstly, this representation is a lot simpler, because an SRT object has exactly the same representation as a static constructor, so we need no new code in the GC to handle it. All the code to deal with bitmaps goes away.</p>
-<p>However, just making this representation change by itself will cause a lot of code growth, because we lose many of the optimisations and sharing that we were able to do with the table and bitmap representation.</p>
-<p>But the new representation has some great opportunities for optimisation of its own, and exploiting all these optimisations results in more compact code than before.</p>
+<p>The basic idea is quite straightforward: instead of the single table
+and bitmap representation, each code block that needs an SRT will have
+an associated SRT object, like this:</p>
+<p><img src="/images/new-srt.png" /></p>
+<p>Firstly, this representation is a lot simpler, because an SRT object
+has exactly the same representation as a static constructor, so we
+need no new code in the GC to handle it. All the code to deal with
+bitmaps goes away.</p>
+<p>However, just making this representation change by itself will cause a
+lot of code growth, because we lose many of the optimisations and
+sharing that we were able to do with the table and bitmap
+representation.</p>
+<p>But the new representation has some great opportunities for
+optimisation of its own, and exploiting all these optimisations
+results in more compact code than before.</p>
 <h3 id="we-never-need-a-singleton-srt">We never need a singleton SRT</h3>
-<p>If an SRT has one reference in it, we replace the pointer to the SRT with the pointer to the reference itself.</p>
-<div class="figure">
-<img src="/images/singleton-srt.png" />
-
-</div>
+<p>If an SRT has one reference in it, we replace the pointer to the SRT
+with the pointer to the reference itself.</p>
+<p><img src="/images/singleton-srt.png" /></p>
 <h3 id="the-srt-field-for-each-code-block-can-be-32-bits-not-96">The SRT field for each code block can be 32 bits, not 96</h3>
-<p>Since we only need a pointer, not a pointer and a bitmap, the overhead goes down to 64 bits. Furthermore, by exploiting the fact that we can represent local pointers by 32-bit offsets (on x86_64), the overhead goes down to 32 bits.</p>
-<div class="figure">
-<img src="/images/relative-srt-ref.png" />
-
-</div>
+<p>Since we only need a pointer, not a pointer and a bitmap, the overhead
+goes down to 64 bits. Furthermore, by exploiting the fact that we can
+represent local pointers by 32-bit offsets (on x86_64), the overhead
+goes down to 32 bits.</p>
+<p><img src="/images/relative-srt-ref.png" /></p>
 <h3 id="we-can-common-up-identical-srts">We can common up identical SRTs</h3>
-<p>This is an obvious one: if multiple code blocks have the same set of static references, they can share a single SRT object.</p>
+<p>This is an obvious one: if multiple code blocks have the same set of
+static references, they can share a single SRT object.</p>
 <h3 id="we-can-drop-duplicate-references-from-an-srt">We can drop duplicate references from an SRT</h3>
-<p>Sometimes an SRT refers to a closure that is also referred to by something that is reachable from the same SRT. For example:</p>
-<div class="figure">
-<img src="/images/new-srt-drop.png" />
-
-</div>
-<p>In this case we can drop the reference to <code>x</code> in the outer SRT, because it’s already contained in the inner SRT. That leaves the outer SRT with a single reference, which means the SRT object itself can just disappear, by the singleton optimisation mentioned earlier.</p>
+<p>Sometimes an SRT refers to a closure that is also referred to by
+something that is reachable from the same SRT. For example:</p>
+<p><img src="/images/new-srt-drop.png" /></p>
+<p>In this case we can drop the reference to <code>x</code> in the outer SRT,
+because it’s already contained in the inner SRT. That leaves the
+outer SRT with a single reference, which means the SRT object itself
+can just disappear, by the singleton optimisation mentioned earlier.</p>
 <h3 id="for-a-function-we-can-combine-the-srt-with-the-static-closure-itself">For a function, we can combine the SRT with the static closure itself</h3>
 <p>A top-level function with an SRT would look like this:</p>
-<div class="figure">
-<img src="/images/new-srt-fun.png" />
-
-</div>
-<p>We might as well just merge the two objects together, and put the SRT entries in the function closure, to give this:</p>
-<div class="figure">
-<img src="/images/new-srt-fun2.png" />
-
-</div>
-<p>Together, these optimisations were enough to reduce code size compared with the old table/bitmap representation.</p>
+<p><img src="/images/new-srt-fun.png" /></p>
+<p>We might as well just merge the two objects together, and put the SRT
+entries in the function closure, to give this:</p>
+<p><img src="/images/new-srt-fun2.png" /></p>
+<p>Together, these optimisations were enough to reduce code size compared
+with the old table/bitmap representation.</p>
 <h2 id="show-me-the-code">Show me the code</h2>
 <ul>
 <li><a href="https://phabricator.haskell.org/D4632">An overhaul of the SRT representation </a></li>
@@ -125,33 +171,72 @@ myLookup name = HashMap.lookup name myMap</code></pre>
     <summary type="html"><![CDATA[<div class="post">
   <h1 class="post-title">Fixing 17 space leaks in GHCi, and keeping them fixed</h1>
   <span class="post-date">June 20, 2018</span>
-  <p>In this post I want to tackle a couple of problems that have irritated me from time to time when working with Haskell.</p>
+  <p>In this post I want to tackle a couple of problems that have irritated
+me from time to time when working with Haskell.</p>
 <ul>
-<li><p><strong>GHC provides some powerful tools for debugging space leaks, but sometimes they’re not enough</strong>. The heap profiler shows you what’s in the heap, but it doesn’t provide detailed visibility into the chain of references that cause a particular data structure to be retained. Retainer profiling was supposed to help with this, but in practice it’s pretty hard to extract the signal you need - retainer profiling will show you one relationship at a time, but you want to see the whole chain of references.</p></li>
-<li><p><strong>Once you’ve fixed a space leak, how can you write a regression test for it</strong>? Sometimes you can make a test case that will use <code>O(n)</code> memory if it leaks instead of <code>O(1)</code>, and then it’s straightforward. But what if your leak is only a constant factor?</p></li>
+<li><p><strong>GHC provides some powerful tools for debugging space leaks, but
+sometimes they’re not enough</strong>. The heap profiler shows you what’s in
+the heap, but it doesn’t provide detailed visibility into the chain of
+references that cause a particular data structure to be
+retained. Retainer profiling was supposed to help with this, but in
+practice it’s pretty hard to extract the signal you need - retainer
+profiling will show you one relationship at a time, but you want to
+see the whole chain of references.</p></li>
+<li><p><strong>Once you’ve fixed a space leak, how can you write a regression test
+for it</strong>? Sometimes you can make a test case that will use <code>O(n)</code>
+memory if it leaks instead of <code>O(1)</code>, and then it’s
+straightforward. But what if your leak is only a constant factor?</p></li>
 </ul>
-<p>We recently noticed an interesting space leak in GHCi. If we loaded a set of modules, and then loaded the same set of modules again, GHCi would need twice as much memory as just loading the modules once. That’s not supposed to happen - GHCi should release whatever data it was holding about the first set of modules when loading a new set. What’s more, after further investigation we found that this effect wasn’t repeated the <em>third</em> time we loaded the modules; only one extra set of modules was being retained.</p>
-<div class="figure">
-<img src="/images/ghci-leak.png" />
-
-</div>
-<p>Conventional methods for finding the space leak were not helpful in this case. GHCi is a complex beast, and just reproducing the problem proved difficult. So I decided to try a trick I’d thought about for a long time but never actually put into practice: using GHC’s <em>weak pointers</em> to detect data that should be dead, but isn’t.</p>
+<p>We recently noticed an interesting space leak in GHCi. If we loaded a
+set of modules, and then loaded the same set of modules again, GHCi
+would need twice as much memory as just loading the modules
+once. That’s not supposed to happen - GHCi should release whatever
+data it was holding about the first set of modules when loading a new
+set. What’s more, after further investigation we found that this
+effect wasn’t repeated the <em>third</em> time we loaded the modules; only
+one extra set of modules was being retained.</p>
+<p><img src="/images/ghci-leak.png" /></p>
+<p>Conventional methods for finding the space leak were not helpful in
+this case. GHCi is a complex beast, and just reproducing the problem
+proved difficult. So I decided to try a trick I’d thought about for a
+long time but never actually put into practice: using GHC’s <em>weak
+pointers</em> to detect data that should be dead, but isn’t.</p>
 <h2 id="weak-pointers-can-detect-space-leaks">Weak pointers can detect space leaks</h2>
 <p>The <a
-href="http://hackage.haskell.org/package/base-4.11.1.0/docs/System-Mem-Weak.html">System.Mem.Weak</a> library provides operations for creating “weak” pointers. A weak pointer is a reference to an object that doesn’t keep the object alive. If we have a weak pointer, we can attempt to <em>dereference</em> it, which will either succeed and return the value it points to, or it will fail in the event that the value has been garbage collected. So a weak pointer can detect when things are garbage collected, which is exactly what we want for detecting space leaks.</p>
+href="http://hackage.haskell.org/package/base-4.11.1.0/docs/System-Mem-Weak.html">System.Mem.Weak</a>
+library provides operations for creating “weak” pointers. A weak
+pointer is a reference to an object that doesn’t keep the object
+alive. If we have a weak pointer, we can attempt to <em>dereference</em> it,
+which will either succeed and return the value it points to, or it
+will fail in the event that the value has been garbage collected. So
+a weak pointer can detect when things are garbage collected, which is
+exactly what we want for detecting space leaks.</p>
 <p>Here’s the idea:</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li>Call <code>mkWeakPtr v Nothing</code> where <code>v</code> is the value you’re interested in.</li>
 <li>Wait until you believe <code>v</code> should be garbage.</li>
 <li>Call <code>System.Mem.performGC</code> to force a full GC.</li>
 <li>Call <code>System.Mem.Weak.deRefWeak</code> on the weak pointer to see if <code>v</code> is alive or not.</li>
 </ol>
-<p>Here’s <a href="https://phabricator.haskell.org/D4658">how I implemented this for GHCi</a>. One thing to note is that just because <code>v</code> was garbage-collected doesn’t mean that there aren’t still pieces of <code>v</code> being retained, so you might need to have several weak pointers to different components of <code>v</code>, like I did in the GHC patch. These really did detect multiple different space leaks.</p>
-<p>This patch reliably detected leaks in trivial examples, including many of the tests in GHCi’s own test suite. That meant we had a way to reproduce the problem without having to use unpredictable measurement methods like memory usage or heap profiles. This made it much easier to iterate on finding the problems.</p>
+<p>Here’s <a href="https://phabricator.haskell.org/D4658">how I
+implemented this for GHCi</a>. One thing to note is that just because
+<code>v</code> was garbage-collected doesn’t mean that there aren’t still pieces
+of <code>v</code> being retained, so you might need to have several weak pointers
+to different components of <code>v</code>, like I did in the GHC patch. These
+really did detect multiple different space leaks.</p>
+<p>This patch reliably detected leaks in trivial examples, including many
+of the tests in GHCi’s own test suite. That meant we had a way to
+reproduce the problem without having to use unpredictable measurement
+methods like memory usage or heap profiles. This made it much easier
+to iterate on finding the problems.</p>
 <h2 id="back-to-the-space-leaks-in-ghci">Back to the space leaks in GHCi</h2>
-<p>That still leaves us with the problem of how to actually diagnose the leak and find the cause. Here the techniques are going to get a bit more grungy: we’ll use <code>gdb</code> to poke around in the heap at runtime, along with some custom utilities in the GHC runtime to help us search through the heap.</p>
+<p>That still leaves us with the problem of how to actually diagnose the
+leak and find the cause. Here the techniques are going to get a bit
+more grungy: we’ll use <code>gdb</code> to poke around in the heap at runtime,
+along with some custom utilities in the GHC runtime to help us search
+through the heap.</p>
 <p>To set things up for debugging, we need to</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li>Compile GHC with <code>-g</code> and <code>-debug</code>, to add debugging info to the binary and debugging functionality to the runtime, respectively.</li>
 <li>load up GHCi in gdb (that’s a bit fiddly and I won’t go into the details here),</li>
 <li>Set things up to reproduce the test case.</li>
@@ -160,12 +245,17 @@ href="http://hackage.haskell.org/package/base-4.11.1.0/docs/System-Mem-Weak.html
 Ok, no modules loaded.
 -fghci-leak-check: Linkable is still alive!
 Prelude&gt;</code></pre>
-<p>The <code>-fghci-leak-check</code> code just spat out a message when it detected a leak. We can <code>Ctrl-C</code> to break into <code>gdb</code>:</p>
+<p>The <code>-fghci-leak-check</code> code just spat out a message when it
+detected a leak. We can <code>Ctrl-C</code> to break into <code>gdb</code>:</p>
 <pre><code>Program received signal SIGINT, Interrupt.
 0x00007ffff17c05b3 in __select_nocancel ()
     at ../sysdeps/unix/syscall-template.S:84
 84	../sysdeps/unix/syscall-template.S: No such file or directory.</code></pre>
-<p>Next I’m going to search the heap for instances of the <code>LM</code> constructor, which corresponds to the <code>Linkable</code> type that the leak detector found. There should be none of these alive, because the <code>:l</code> command tells GHCi to unload everything, so any <code>LM</code> constructors we find must be leaking:</p>
+<p>Next I’m going to search the heap for instances of the <code>LM</code>
+constructor, which corresponds to the <code>Linkable</code> type that the leak
+detector found. There should be none of these alive, because the <code>:l</code>
+command tells GHCi to unload everything, so any <code>LM</code>
+constructors we find must be leaking:</p>
 <pre><code>(gdb) p findPtr(ghc_HscTypes_LM_con_info,1)
 0x4201a073d8 = ghc:HscTypes.LM(0x4201a074b0, 0x4201a074c8, 0x4201a074e2)
 --&gt;
@@ -174,9 +264,20 @@ Prelude&gt;</code></pre>
 0x42017e2088 = ghc-prim:GHC.Types.:(0x4201a073d9, 0x7ffff2e9f679)
 0x42017e2ae0 = ghc-prim:GHC.Types.:(0x4201a073d9, 0x7ffff2e9f679)
 $1 = void</code></pre>
-<p>The <code>findPtr</code> function comes from the RTS, it’s a function designed specifically for searching through the heap for things from inside <code>gdb</code>. I asked it to search for <code>ghc_HscTypes_LM_con_info</code>, which is the info pointer for the <code>LM</code> constructor - every instance of that constructor will have this pointer as its first word.</p>
-<p>The <code>findPtr</code> function doesn’t just search for objects in the heap, it also attempts to find the object’s parent, and will continue tracing back through the chain of ancestors until it finds multiple parents.</p>
-<p>In this case, it found a single <code>LM</code> constructor, which had four parents: two <code>WEAK</code> objects and two <code>ghc-prim:GHC.Types.:</code> objects, which are the list constructor <code>(:)</code>. The <code>WEAK</code> objects we know about: those are the weak pointers used by the leak-checking code. So we need to trace the parents of the other objects, which we can do with another call to <code>findPtr</code>:</p>
+<p>The <code>findPtr</code> function comes from the RTS, it’s a function designed
+specifically for searching through the heap for things from inside
+<code>gdb</code>. I asked it to search for <code>ghc_HscTypes_LM_con_info</code>,
+which is the info pointer for the <code>LM</code> constructor - every
+instance of that constructor will have this pointer as its first word.</p>
+<p>The <code>findPtr</code> function doesn’t just search for objects in the heap, it
+also attempts to find the object’s parent, and will continue tracing
+back through the chain of ancestors until it finds multiple parents.</p>
+<p>In this case, it found a single <code>LM</code> constructor, which had four
+parents: two <code>WEAK</code> objects and two <code>ghc-prim:GHC.Types.:</code> objects,
+which are the list constructor <code>(:)</code>. The <code>WEAK</code> objects we know
+about: those are the weak pointers used by the leak-checking code. So
+we need to trace the parents of the other objects, which we can do with
+another call to <code>findPtr</code>:</p>
 <pre><code>(gdb) p findPtr(0x42017e2088,1)
 0x42016e9c08 = ghc:Linker.PersistentLinkerState(0x42017e2061, 0x7ffff3c2bc63, 0x42017e208a, 0x7ffff2e9f679, 0x42016e974a, 0x7ffff2e9f679)
 --&gt;
@@ -195,16 +296,28 @@ $1 = void</code></pre>
 0x4200ec6b80 = base:GHC.STRef.STRef(0x42016e0500)
 --&gt;
 $2 = void</code></pre>
-<p>This time we traced through several objects, until we came to an <code>STRef</code>, and <code>findPtr</code> found no further parents. Perhaps the next parent is a CAF (a top-level thunk) which <code>findPtr</code> won’t find because it only searches the heap. Anyway, in the chain we have two <code>PersistentLinkerState</code> objects, and some <code>THUNK</code>s - it looks like perhaps we’re holding onto an old version of the <code>PersistentLinkerState</code>, which contains the leaking <code>Linkable</code> object.</p>
+<p>This time we traced through several objects, until we came to an
+<code>STRef</code>, and <code>findPtr</code> found no further parents. Perhaps the next
+parent is a CAF (a top-level thunk) which <code>findPtr</code> won’t find because
+it only searches the heap. Anyway, in the chain we have two
+<code>PersistentLinkerState</code> objects, and some <code>THUNK</code>s - it looks like
+perhaps we’re holding onto an old version of the
+<code>PersistentLinkerState</code>, which contains the leaking <code>Linkable</code> object.</p>
 <p>Let’s pick one <code>THUNK</code> and take a closer look.</p>
 <pre><code>(gdb) p4 0x42016e9728
 0x42016e9740:	0x42016e9c09
 0x42016e9738:	0x42016e9c41
 0x42016e9730:	0x0
 0x42016e9728:	0x7ffff74790c0 &lt;sorW_info&gt;</code></pre>
-<p>The <code>p4</code> command is just a macro for dumping memory (you can get these macros from <a
+<p>The <code>p4</code> command is just a macro for dumping memory (you can get these
+macros from <a
 href="https://ghc.haskell.org/trac/ghc/wiki/Debugging/CompiledCode">here</a>).</p>
-<p>The header of the object is <code>0x7ffff74790c0 &lt;sorW_info&gt;</code>, which is just a compiler-generated symbol. How can we find out what code this object corresponds to? Fortunately, GHC’s new <code>-g</code> option generates DWARF debugging information which <code>gdb</code> can understand, and because we compiled GHC itself with <code>-g</code> we can get <code>gdb</code> to tell us what code this address corresponds to:</p>
+<p>The header of the object is <code>0x7ffff74790c0 &lt;sorW_info&gt;</code>, which is just a
+compiler-generated symbol. How can we find out what code this object
+corresponds to? Fortunately, GHC’s new <code>-g</code> option generates DWARF
+debugging information which <code>gdb</code> can understand, and because we
+compiled GHC itself with <code>-g</code> we can get <code>gdb</code> to tell us what code
+this address corresponds to:</p>
 <pre><code>(gdb) list *0x7ffff74790c0
 0x7ffff74790c0 is in sorW_info (compiler/ghci/Linker.hs:1129).
 1124
@@ -217,23 +330,49 @@ href="https://ghc.haskell.org/trac/ghc/wiki/Debugging/CompiledCode">here</a>).</
 1131	                      objs_loaded = remaining_objs_loaded }
 1132	
 1133	  return new_pls</code></pre>
-<p>In this case it told us that the object corresponds to line 1129 of <code>compiler/ghci/Linker.hs</code>. This is all part of the function <code>unload_wkr</code>, which is part of the code for unloading compiled code in GHCi. It looks like we’re on the right track.</p>
-<p>Now, <code>-g</code> isn’t perfect - the line it pointed to isn’t actually a thunk. But it’s close: the line it points to refers to <code>closure_env'</code> which is defined on line 1126, and it is indeed a thunk. Moreover, we can see that it has a reference to <code>pls</code>, which is the original <code>PersistentLinkerState</code> before the unloading operation.</p>
-<p>To avoid this leak, we could pattern-match on <code>pls</code> eagerly rather than doing the lazy record selection <code>(closure_env pls)</code> in the definition of <code>closure_env'</code>. That’s exactly what I did to fix this particular leak, as you can see in <a
-href="https://phabricator.haskell.org/D4872">the patch that fixes it</a>.</p>
-<p>Fixing one leak isn’t necessarily enough: the data structure might be retained in multiple different ways, and it won’t be garbage collected until all the references are squashed. In total I found</p>
+<p>In this case it told us that the object corresponds to line 1129 of
+<code>compiler/ghci/Linker.hs</code>. This is all part of the function
+<code>unload_wkr</code>, which is part of the code for unloading compiled
+code in GHCi. It looks like we’re on the right track.</p>
+<p>Now, <code>-g</code> isn’t perfect - the line it pointed to isn’t actually a
+thunk. But it’s close: the line it points to refers to <code>closure_env'</code> which is defined on line 1126, and it is
+indeed a thunk. Moreover, we can see that it has a reference to <code>pls</code>,
+which is the original <code>PersistentLinkerState</code> before the unloading
+operation.</p>
+<p>To avoid this leak, we could pattern-match on <code>pls</code> eagerly rather
+than doing the lazy record selection <code>(closure_env pls)</code> in the
+definition of <code>closure_env'</code>. That’s exactly what I did to fix this
+particular leak, as you can see in <a
+href="https://phabricator.haskell.org/D4872">the patch that fixes
+it</a>.</p>
+<p>Fixing one leak isn’t necessarily enough: the data structure might be
+retained in multiple different ways, and it won’t be garbage collected
+until all the references are squashed. In total I found</p>
 <ul>
-<li><a href="https://phabricator.haskell.org/D4659">7 leaks in GHCi</a> that were collectively responsible for the original leak, and</li>
-<li><a href="https://phabricator.haskell.org/D4872">A further 10 leaks</a> that only appeared when GHC was compiled without optimisation. (It seems that GHC’s optimiser is pretty good at fixing space leaks by itself)</li>
+<li><a href="https://phabricator.haskell.org/D4659">7 leaks in GHCi</a> that were
+collectively responsible for the original leak, and</li>
+<li><a href="https://phabricator.haskell.org/D4872">A further 10 leaks</a>
+that only appeared when GHC was compiled without optimisation. (It
+seems that GHC’s optimiser is pretty good at fixing space leaks by
+itself)</li>
 </ul>
-<p>You might ask how anyone could have found these without undergoing this complicated debugging process. And whether there are more lurking that we haven’t found yet. These are really good questions, and I don’t have a good answer for either. But at least we’re in a better place now:</p>
+<p>You might ask how anyone could have found these without undergoing
+this complicated debugging process. And whether there are more lurking
+that we haven’t found yet. These are really good questions, and I
+don’t have a good answer for either. But at least we’re in a better
+place now:</p>
 <ul>
-<li>The leaks are fixed, and we have a regression test to prevent them being reintroduced.</li>
-<li>If you happen to write a patch that introduces a leak, you’ll know what the patch is, so you have a head start in debugging it.</li>
+<li>The leaks are fixed, and we have a regression test to prevent them
+being reintroduced.</li>
+<li>If you happen to write a patch that introduces a leak, you’ll
+know what the patch is, so you have a head start in debugging it.</li>
 </ul>
 <h2 id="could-we-do-better">Could we do better?</h2>
-<p>Obviously this is all a bit painful and we could definitely build better tools to make this process easier. Perhaps something based on <code>heap-view</code> which was <a
-href="https://phabricator.haskell.org/D3055">recently added to GHC</a>? I’d love to see someone tackle this.</p>
+<p>Obviously this is all a bit painful and we could definitely build
+better tools to make this process easier. Perhaps something based on
+<code>heap-view</code> which was <a
+href="https://phabricator.haskell.org/D3055">recently added to
+GHC</a>? I’d love to see someone tackle this.</p>
 </div>
 ]]></summary>
 </entry>
@@ -246,7 +385,9 @@ href="https://phabricator.haskell.org/D3055">recently added to GHC</a>? I’d lo
     <summary type="html"><![CDATA[<div class="post">
   <h1 class="post-title">Hotswapping Haskell</h1>
   <span class="post-date">October 17, 2017</span>
-  <p><em>This is a guest post by <a href="https://github.com/JonCoens">Jon Coens</a>. Jon worked on the Haxl project since the beginning in 2013, and nowadays he works on broadening Haskell use within Facebook.</em></p>
+  <p><em>This is a guest post by <a href="https://github.com/JonCoens">Jon
+Coens</a>. Jon worked on the Haxl project since the beginning in
+2013, and nowadays he works on broadening Haskell use within Facebook.</em></p>
 <p>From developing code through deployment, Facebook needs to move fast. This is especially true for one of our <a href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">anti-abuse systems</a> that deploys hundreds of code changes every day. Releasing a large application (hundreds of Kloc) that many times a day presents plenty of intriguing challenges. Haskell’s strict type system means we’re able to confidently push new code knowing that we can’t crash the server, but getting those changes out to many thousands of machines as fast as possible requires some ingenuity.</p>
 <p>Given the application size and deployment speed constraints:</p>
 <ul>
@@ -275,7 +416,7 @@ href="https://phabricator.haskell.org/D3055">recently added to GHC</a>? I’d lo
 </ul>
 <p>This minimizes the amount of time between making a code change and having it running in an efficient production environment. It only rebuilds the minimum set of code, deploys a much smaller file to each server, and keeps the server running through each update.</p>
 <p>Not every module or application can follow this update model as there are some crucial constraints to consider when figuring out what can go into the shared object.</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li>The symbol API boundaries into and out of the shared object must remain constant</li>
 <li>The main binary cannot persist any reference to code or data originating from the shared object, because that will prevent the GC from unloading the object.</li>
 </ol>
@@ -290,7 +431,8 @@ href="https://phabricator.haskell.org/D3055">recently added to GHC</a>? I’d lo
 <li><p><a href="https://github.com/fbsamples/ghc-hotswap/tree/master/ghc-hotswap-demo"><strong>ghc-hotswap-demo</strong></a> - User-written application utilizing the above</p></li>
 </ul>
 <h3 id="loading-and-extracting-from-the-shared-object">Loading and extracting from the shared object</h3>
-<p>Let’s start with bringing in a new shared object, the guts of which can be found in <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap/GHC/Hotswap.hs">loadNewSO</a>. It makes heavy use of the <a href="https://github.com/ghc/ghc/blob/master/libraries/ghci/GHCi/ObjLink.hs">GHCi.ObjLink</a> library. We need the name of an exported symbol to lookup inside the shared object (<code>symName</code>) and the file path to where the shared object lives (<code>newSO</code>). With these, we can return an instance of some data that originates from that shared object.</p>
+<p>Let’s start with bringing in a new shared object, the guts of which can be found in <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap/GHC/Hotswap.hs">loadNewSO</a>. It makes heavy use of the <a href="https://github.com/ghc/ghc/blob/master/libraries/ghci/GHCi/ObjLink.hs">GHCi.ObjLink</a> library.
+We need the name of an exported symbol to lookup inside the shared object (<code>symName</code>) and the file path to where the shared object lives (<code>newSO</code>). With these, we can return an instance of some data that originates from that shared object.</p>
 <pre><code>initObjLinker DontRetainCAFs</code></pre>
 <p>GHCi’s linker needs to be initialized before use, and fortunately the call is idempotent. “DontRetainCAFs” tells the linker and GC not to retain CAFs (Constant Applicative Forms, i.e. top-level values) in the shared object. GHCi normally retains all CAFs as the user can type an expression that refers to anything at all, but for hot-swapping this would prevent the object from being unloaded as we would have references into the object from the heap-resident CAFs.</p>
 <pre><code>loadObj newSO
@@ -311,7 +453,8 @@ return h</code></pre>
 <p>Assuming everything has gone well, we purge GHCi’s symbol table of all symbols defined from our shared object and then return the value we retrieved. Purging the symbols makes room for the next shared object to come in and resolve successfully without fully unloading the shared object that we’re actively holding references to. We could tell GHCi to unload the shared object at this point, but this would cause the GC to aggressively crawl the entire shared object every single time, which is a lot of unnecessary work. Purging retains the code in the process to make the GC’s work lighter while making room for the next shared object. See <em>Safely Transition Updates</em> for when to unload the shared object.</p>
 <p>The project that defines the code for the shared object must be generated in a relocatable fashion. It must be configured with the <code>—enable-library-for-ghci</code> flag, otherwise <code>loadObj</code> and <code>resolveObj</code> will throw a fit.</p>
 <h3 id="defining-the-shared-objects-api">Defining the shared object’s API</h3>
-<p>During compilation, the function names from code turn into quasi-human-readable symbol names. Ensuring you look up the correct symbol name from a shared object can become brittle if you rely on hardcoded munged names. To mitigate this, we define a single data type to house all the symbols we want to expose to the main application, and export a ccall using Haskell’s Foreign library. This guarantees we can export a particular symbol with a name we control. Placing all our data behind a single symbol (that both the shared object and main binary can depend on), we reduce the coupling to only a couple of points.</p>
+<p>During compilation, the function names from code turn into quasi-human-readable symbol names. Ensuring you look up the correct symbol name from a shared object can become brittle if you rely on hardcoded munged names. To mitigate this, we define a single data type to house all the symbols we want to expose to the main application, and export a ccall using Haskell’s Foreign library. This guarantees we can export a particular symbol with a name we control.
+Placing all our data behind a single symbol (that both the shared object and main binary can depend on), we reduce the coupling to only a couple of points.</p>
 <p>Let’s look at <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap-types/Types.hs">Types.hs</a>.</p>
 <pre><code>data SOHandles = SOHandles
   { someData :: Text
@@ -323,7 +466,8 @@ return h</code></pre>
 <pre><code>foreign import ccall &quot;dynamic&quot;
   callExport :: FunPtr SOHandleExport -&gt; SOHandleExport</code></pre>
 <p>Here we invoke Haskell’s FFI to generate a function that calls a function pointer to our export function as an actual Haskell function. The “dynamic” parameter to ccall <a href="https://www.haskell.org/onlinereport/haskell2010/haskellch8.html">does exactly this</a>. We saw using this earlier when loading in a shared object.</p>
-<p>Next let’s look at code for the <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap-so/SO/Handles.hs">shared object itself</a>. Note that we depend on and import the <code>Types</code> module defined in <code>ghc-hotswap-types</code>.</p>
+<p>Next let’s look at code for the <a href="https://github.com/fbsamples/ghc-hotswap/blob/master/ghc-hotswap-so/SO/Handles.hs">shared object itself</a>.
+Note that we depend on and import the <code>Types</code> module defined in <code>ghc-hotswap-types</code>.</p>
 <pre><code>foreign export ccall &quot;hs_soHandles&quot;
   hsNewSOHandle :: SOHandleExport</code></pre>
 <p>This uses the FFI to explicitly export a Haskell function called <code>hsNewSOHandle</code> as a symbol named <code>“hs_soHandles”</code>. This is the function our main binary is going to end up calling, so set its type to our export function.</p>
@@ -357,7 +501,7 @@ return h</code></pre>
 <li><p>If it contains data where the datatype is defined in the shared object (rather than in the packages that the object depends on, which are statically linked), then again we have a reference from the heap-resident data into the shared object, which will cause retention.</p></li>
 </ul>
 <p>So to avoid retention while having mutable persistent data, the rules of thumb are:</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li><p><code>rnf</code> everything before writing into the persistent <code>IORef</code>, and ensure that any manual <code>NFData</code> instances don’t lie.</p></li>
 <li><p>Don’t store values that contain functions</p></li>
 <li><p>Don’t store values that use datatypes defined in the shared object</p></li>
@@ -379,62 +523,166 @@ return h</code></pre>
     <summary type="html"><![CDATA[<div class="post">
   <h1 class="post-title">Asynchronous Exceptions in Practice</h1>
   <span class="post-date">January 24, 2017</span>
-  <p>Asynchronous exceptions are a controversial feature of Haskell. You can throw an exception to another thread, at any time; all you need is its <code>ThreadId</code>:</p>
+  <p>Asynchronous exceptions are a controversial feature of Haskell. You
+can throw an exception to another thread, at any time; all you need is
+its <code>ThreadId</code>:</p>
 <pre><code>throwTo :: Exception e =&gt; ThreadId -&gt; e -&gt; IO ()</code></pre>
-<p>The other thread will receive the exception immediately, whatever it is doing. So you have to be ready for an asynchronous exception to fire at any point in your code. Isn’t that a scary thought?</p>
-<p>It’s an old idea - in fact, when we originally added asynchronous exceptions to Haskell (and wrote <a href="http://simonmar.github.io/bib/papers/async.pdf">a paper</a> about it), it was shortly after Java had removed the equivalent feature, because it was impossible to program with.</p>
-<p>So how do we get away with it in Haskell? I wrote a little about the rationale in <a
-href="http://chimera.labs.oreilly.com/books/1230000000929/ch09.html">my book</a>. Basically it comes down to this: if we want to be able to interrupt purely functional code, asynchronous exceptions are the only way, because polling would be a side-effect. Therefore the remaining problem is how to make asynchronous exceptions safe for the impure parts of our code. Haskell provides functionality for disabling asynchronous exceptions during critical sections (<code>mask</code>) and abstractions based around it that can be used for safe resource acquisition (<code>bracket</code>).</p>
-<p>At Facebook I’ve had the opportunity to work with asynchronous exceptions in a large-scale real-world setting, and here’s what I’ve learned:</p>
+<p>The other thread will receive the exception immediately, whatever it
+is doing. So you have to be ready for an asynchronous exception to
+fire at any point in your code. Isn’t that a scary thought?</p>
+<p>It’s an old idea - in fact, when we originally added asynchronous
+exceptions to Haskell (and wrote <a href="http://simonmar.github.io/bib/papers/async.pdf">a paper</a> about it), it
+was shortly after Java had removed the equivalent feature, because it
+was impossible to program with.</p>
+<p>So how do we get away with it in Haskell? I wrote a little about the
+rationale in <a
+href="http://chimera.labs.oreilly.com/books/1230000000929/ch09.html">my
+book</a>. Basically it comes down to this: if we want to be able to
+interrupt purely functional code, asynchronous exceptions are the only
+way, because polling would be a side-effect. Therefore the remaining
+problem is how to make asynchronous exceptions safe for the impure
+parts of our code. Haskell provides functionality for disabling
+asynchronous exceptions during critical sections (<code>mask</code>) and
+abstractions based around it that can be used for safe resource
+acquisition (<code>bracket</code>).</p>
+<p>At Facebook I’ve had the opportunity to work with asynchronous
+exceptions in a large-scale real-world setting, and here’s what I’ve
+learned:</p>
 <ul>
-<li><p>They’re really useful, particularly for catching bugs that cause excessive use of resources.</p></li>
-<li><p>In the vast majority of our Haskell codebase we don’t need to worry about them at all. The documentation that we give to our users who write Haskell code to run on our platform doesn’t mention asynchronous exceptions.</p></li>
-<li><p>But some parts of the code can be <em>really hard to get right</em>. Code in the <code>IO</code> monad dealing with multithreading or talking to foreign libraries, for example, has to care about cleaning up resources and recovering safely in the event of an asynchronous exception.</p></li>
+<li><p>They’re really useful, particularly for catching bugs that cause
+excessive use of resources.</p></li>
+<li><p>In the vast majority of our Haskell codebase we don’t need to worry
+about them at all. The documentation that we give to our users who
+write Haskell code to run on our platform doesn’t mention
+asynchronous exceptions.</p></li>
+<li><p>But some parts of the code can be <em>really hard to get right</em>. Code
+in the <code>IO</code> monad dealing with multithreading or talking to foreign
+libraries, for example, has to care about cleaning up resources and
+recovering safely in the event of an asynchronous exception.</p></li>
 </ul>
 <p>Let me take each of those points in turn and elaborate.</p>
 <h2 id="where-asynchronous-exceptions-are-useful">Where asynchronous exceptions are useful</h2>
-<p>The motivating example often used is timeouts, for example of connections in a network service. But this example is not all that convincing: in a network server we’re probably writing code that’s mostly in the <code>IO</code> monad, we know the places where we’re blocking, and we could use other mechanisms to implement timeouts that would be less “dangerous” but almost as reliable as asynchronous exceptions.</p>
+<p>The motivating example often used is timeouts, for example of
+connections in a network service. But this example is not all that
+convincing: in a network server we’re probably writing code that’s
+mostly in the <code>IO</code> monad, we know the places where we’re blocking, and
+we could use other mechanisms to implement timeouts that would be less
+“dangerous” but almost as reliable as asynchronous exceptions.</p>
 <p>In <a
-href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">Sigma</a>, we use asynchronous exceptions to prevent huge requests from degrading the performance of our server for other clients.</p>
-<p>In a complex system, it’s highly likely that some requests will end up using an excessive amount of resources. Perhaps there’s a bug in the code that sometimes causes it to use a lot of CPU (or even an infinite loop), or perhaps the code fetches some data to operate on, and the data ends up being unexpectedly large. In principle we could find all these cases and fix them, but in practice, large systems can have surprising emergent behaviour and we can’t guarantee to find all the bugs outside production.</p>
+href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">Sigma</a>,
+we use asynchronous exceptions to
+prevent huge requests from degrading the performance of our server
+for other clients.</p>
+<p>In a complex system, it’s highly likely that some requests will end up
+using an excessive amount of resources. Perhaps there’s a bug in the
+code that sometimes causes it to use a lot of CPU (or even an infinite
+loop), or perhaps the code fetches some data to operate on, and the
+data ends up being unexpectedly large. In principle we could find all
+these cases and fix them, but in practice, large systems can have
+surprising emergent behaviour and we can’t guarantee to find all the
+bugs outside production.</p>
 <h3 id="beware-elephants">Beware Elephants</h3>
-<p>So sometimes a request turns out to be an elephant, and we have to deal with it. If we do nothing, the elephant will trample around, slowing everything down, or maxing out some resource like memory or network bandwidth, which can cause failures for other requests running on the system.</p>
-<div class="figure">
-<img src="/images/elephant.jpg" />
-
-</div>
-<p>One way or another something is going to die. We would rather it was the elephant, and not the many other requests currently running on the same machine. Stopping the elephant minimises the destruction. The elephant’s owner will then fix their problem, and we’ve mitigated a bug with minimal disruption.</p>
-<p>Our elephant gun is called <em>Allocation Limits</em>. The Haskell runtime keeps track of how much memory each Haskell thread has allocated in total, and if that total exceeds the limit we set, the thread receives an asynchronous exception, namely <code>AllocationLimitExceeded</code>. The user code running on our platform is not permitted to catch this exception, instead the server catches it, logs some data to aid debugging, and sends an error back to the client that initiated the request.</p>
-<p>We’re using “memory allocated” as a proxy for “work done”. Most computation in Haskell allocates memory, so this is a more predictable measure than wall-clock time. It’s a fairly crude way to identify excessively large requests, but it works well for us.</p>
-<p>Here’s what happened when we enabled allocation limits early on during Sigma’s development. The graph tracks the maximum amount of live memory across different groups of machines. It turns out there were a very small fraction of requests consuming a huge amount of resources, and enabling allocation limits squashed them nicely:</p>
-<div class="figure">
-<img src="/images/alloclimits.jpg" />
-
-</div>
-<p>Allocation limits have helped protect us from disaster on several occasions. One time, an infinite loop made its way into production; the result was that our monitoring showed an increase in requests hitting the allocation limit. The data being logged allowed it to be narrowed down to one particular type of request, we were quickly able to identify the change that caused the problem, undo it, and notify the owner. Nobody else noticed.</p>
+<p>So sometimes a request turns out to be an elephant, and we have to
+deal with it. If we do nothing, the elephant will trample around,
+slowing everything down, or maxing out some resource like memory or
+network bandwidth, which can cause failures for other requests
+running on the system.</p>
+<p><img src="/images/elephant.jpg" /></p>
+<p>One way or another something is going to die. We would rather it was
+the elephant, and not the many other requests currently running on the
+same machine. Stopping the elephant minimises the destruction. The
+elephant’s owner will then fix their problem, and we’ve mitigated a
+bug with minimal disruption.</p>
+<p>Our elephant gun is called <em>Allocation Limits</em>. The Haskell runtime
+keeps track of how much memory each Haskell thread has allocated in
+total, and if that total exceeds the limit we set, the thread receives
+an asynchronous exception, namely <code>AllocationLimitExceeded</code>. The user
+code running on our platform is not permitted to catch this exception,
+instead the server catches it, logs some data to aid debugging, and
+sends an error back to the client that initiated the request.</p>
+<p>We’re using “memory allocated” as a proxy for “work done”. Most
+computation in Haskell allocates memory, so this is a more predictable
+measure than wall-clock time. It’s a fairly crude way to identify
+excessively large requests, but it works well for us.</p>
+<p>Here’s what happened when we enabled allocation limits early on during
+Sigma’s development. The graph tracks the maximum amount of live memory
+across different groups of machines. It turns out there were
+a very small fraction of requests consuming a huge amount of
+resources, and enabling allocation limits squashed them nicely:</p>
+<p><img src="/images/alloclimits.jpg" /></p>
+<p>Allocation limits have helped protect us from disaster on several
+occasions. One time, an infinite loop made its way into production;
+the result was that our monitoring showed an increase in requests
+hitting the allocation limit. The data being logged allowed it to be
+narrowed down to one particular type of request, we were quickly able
+to identify the change that caused the problem, undo it, and notify
+the owner. Nobody else noticed.</p>
 <h2 id="in-the-vast-majority-of-code-we-dont-need-to-worry-about-asynchronous-exceptions">In the vast majority of code, we don’t need to worry about asynchronous exceptions</h2>
-<p>Because you don’t have to poll for an asynchronous exception, they work almost everywhere. All pure code works with asynchronous exceptions without change.</p>
-<p>In our platform, clients write code on top of the <a href="https://github.com/facebook/Haxl">Haxl</a> framework in which I/O is provided only via a fixed set of APIs that we control, so we can guarantee that those APIs are safe, and therefore all of the client code is safe by virtue of abstraction.</p>
+<p>Because you don’t have to poll for an asynchronous exception, they
+work almost everywhere. All pure code works with asynchronous
+exceptions without change.</p>
+<p>In our platform, clients write code on top of the <a href="https://github.com/facebook/Haxl">Haxl</a>
+framework in which I/O is provided only via a fixed set of APIs that
+we control, so we can guarantee that those APIs are safe, and
+therefore all of the client code is safe by virtue of abstraction.</p>
 <h2 id="some-parts-of-the-code-can-be-really-hard-to-get-right">Some parts of the code can be <em>really hard to get right</em></h2>
-<p>That leaves the parts of the code that implement the I/O libraries and other lower level functionality. These are the places where we have to care about asynchronous exceptions: if an async exception fires when we have just opened a connection to a remote server, we have to close it again and free all the resources associated with the connection, for example.</p>
+<p>That leaves the parts of the code that implement the I/O libraries and
+other lower level functionality. These are the places where we have
+to care about asynchronous exceptions: if an async exception fires
+when we have just opened a connection to a remote server, we have to
+close it again and free all the resources associated with the
+connection, for example.</p>
 <p>In principle, you can follow a few guidelines to be safe.</p>
 <ul>
-<li><p>Use <code>bracket</code> when allocating any kind of resource that needs to be explicitly released. This is not specific to asynchronous exceptions: coping with ordinary synchronous exceptions requires a good resource-allocation discipline, so your code should be using <code>bracket</code> anyway.</p></li>
-<li><p>Use the <code>async</code> package which avoids some of the common problems, such as making sure that you fork a thread inside <code>mask</code> to avoid asynchronous exceptions leaking.</p></li>
+<li><p>Use <code>bracket</code> when allocating any kind of resource that needs to be
+explicitly released. This is not specific to asynchronous
+exceptions: coping with ordinary synchronous exceptions
+requires a good resource-allocation discipline, so your code should
+be using <code>bracket</code> anyway.</p></li>
+<li><p>Use the <code>async</code> package which avoids some of the common problems,
+such as making sure that you fork a thread inside <code>mask</code> to avoid
+asynchronous exceptions leaking.</p></li>
 </ul>
 <p>Nevertheless it’s still possible to go wrong. Here are some ways:</p>
 <ul>
-<li><p>If you want asynchronous exceptions to work, be careful you don’t accidentally run inside <code>mask</code>, or <code>uninterruptibleMask</code>. We’ve seen examples of third-party libraries that run callbacks inside <code>mask</code> (e.g. the <code>hinotify</code> library <a
-  href="https://github.com/kolmodin/hinotify/pull/22">until recently</a>). Use <code>getMaskingState</code> to assert that you’re not masked when you don’t want to be.</p></li>
-<li><p>Be careful that those asynchronous exceptions don’t escape from a thread if the thread is created by calling a <code>foreign export</code>, because uncaught exceptions will terminate the whole process. Unlike when using <code>async</code>, a <code>foreign export</code> can’t be created inside <code>mask</code>. (this is something that should be fixed in GHC, really).</p></li>
-<li><p>Catching all exceptions seems like a good idea when you want to be bullet-proof, but if you catch and discard the <code>ThreadKilled</code> exception it becomes really hard to actually kill that thread.</p></li>
-<li><p>If you’re coordinating with some foreign code and the Haskell code gets an asynchronous exception, make sure that the foreign code will also clean up properly.</p></li>
+<li><p>If you want asynchronous exceptions to work, be careful you don’t
+accidentally run inside <code>mask</code>, or <code>uninterruptibleMask</code>. We’ve seen
+examples of third-party libraries that run callbacks inside <code>mask</code>
+(e.g. the <code>hinotify</code> library <a
+href="https://github.com/kolmodin/hinotify/pull/22">until
+recently</a>). Use <code>getMaskingState</code> to assert that you’re not
+masked when you don’t want to be.</p></li>
+<li><p>Be careful that those asynchronous exceptions don’t escape from a
+thread if the thread is created by calling a <code>foreign export</code>,
+because uncaught exceptions will terminate the whole process.
+Unlike when using <code>async</code>, a <code>foreign export</code> can’t be created
+inside <code>mask</code>. (this is something that should be fixed in GHC,
+really).</p></li>
+<li><p>Catching all exceptions seems like a good idea when you want to be
+bullet-proof, but if you catch and discard the <code>ThreadKilled</code>
+exception it becomes really hard to actually kill that thread.</p></li>
+<li><p>If you’re coordinating with some foreign code and the Haskell code
+gets an asynchronous exception, make sure that the foreign code will
+also clean up properly.</p></li>
 </ul>
-<p>The type system is of no help at all with finding these bugs, the only way you can find them is with careful eyeballs, good abstractions, lots of testing, and plenty of assertions.</p>
+<p>The type system is of no help at all with finding these bugs, the only
+way you can find them is with careful eyeballs, good abstractions,
+lots of testing, and plenty of assertions.</p>
 <h2 id="its-worth-it">It’s worth it</h2>
-<p>My claim is, even though some of the low-level code can be hard to get right, the benefits are worth it.</p>
-<p>Asynchronous exceptions generalise several exceptional conditions that relate to resource consumption: stack overflow, timeouts, allocation limits, and heap overflow exceptions. We only have to make our code asynchronous-exception-safe once, and it’ll work with all these different kinds of errors. What’s more, being able to terminate threads with confidence that they will clean up promptly and exit is really useful. (It would be nice to do a comparison with Erlang here, but not having written a lot of this kind of code in Erlang I can’t speak with any authority.)</p>
-<p>In a high-volume network service, having a guarantee that a class of runaway requests will be caught and killed off can help reliability, and give you breathing room when things go wrong.</p>
+<p>My claim is, even though some of the low-level code can be hard to get
+right, the benefits are worth it.</p>
+<p>Asynchronous exceptions generalise several exceptional conditions that
+relate to resource consumption: stack overflow, timeouts, allocation
+limits, and heap overflow exceptions. We only have to make our code
+asynchronous-exception-safe once, and it’ll work with all these
+different kinds of errors. What’s more, being able to terminate
+threads with confidence that they will clean up promptly and exit is
+really useful. (It would be nice to do a comparison with Erlang here,
+but not having written a lot of this kind of code in Erlang I can’t
+speak with any authority.)</p>
+<p>In a high-volume network service, having a guarantee that a class of
+runaway requests will be caught and killed off can help reliability,
+and give you breathing room when things go wrong.</p>
 </div>
 ]]></summary>
 </entry>
@@ -447,52 +695,144 @@ href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell
     <summary type="html"><![CDATA[<div class="post">
   <h1 class="post-title">Haskell in the Datacentre</h1>
   <span class="post-date">December  8, 2016</span>
-  <p>At Facebook we run Haskell on thousands of servers, together handling over a million requests per second. Obviously we’d like to make the most efficient use of hardware and get the most throughput per server that we can. So how do you tune a Haskell-based server to run well?</p>
-<p>Over the past few months we’ve been tuning our server to squeeze out as much performance as we can per machine, and this has involved changes throughout the stack. In this post I’ll tell you about some changes we made to GHC’s runtime scheduler.</p>
+  <p>At Facebook we run Haskell on thousands of servers, together handling
+over a million requests per second. Obviously we’d like to make the
+most efficient use of hardware and get the most throughput per server
+that we can. So how do you tune a Haskell-based server to run well?</p>
+<p>Over the past few months we’ve been tuning our server to squeeze out
+as much performance as we can per machine, and this has involved
+changes throughout the stack. In this post I’ll tell you about some
+changes we made to GHC’s runtime scheduler.</p>
 <h2 id="summary">Summary</h2>
-<p>We made one primary change: GHC’s runtime is based around an M:N threading model which is designed to map a large number (M) of lightweight Haskell threads onto a small number (N) of heavyweight OS threads. In our application M is fixed and not all that big: we can max out a server’s resources when M is about 3-4x the number of cores, and meanwhile setting N to the number of cores wasn’t enough to let us use all the CPU (I’ll explain why shortly).</p>
-<p>To cut to the chase, we ended up increasing N to be the same as M (or close to it), and this bought us an extra 10-20% throughput per machine. It wasn’t as simple as just setting some command-line options, because GHC’s garbage collector is designed to run with N equal to the number of cores, so I had to make some changes to the way GHC schedules things to make this work.</p>
+<p>We made one primary change: GHC’s runtime is based around an M:N
+threading model which is designed to map a large number (M) of
+lightweight Haskell threads onto a small number (N) of heavyweight OS
+threads. In our application M is fixed and not all that big: we can
+max out a server’s resources when M is about 3-4x the number of
+cores, and meanwhile setting N to the number of cores wasn’t enough to
+let us use all the CPU (I’ll explain why shortly).</p>
+<p>To cut to the chase, we ended up increasing N to be the same as M (or
+close to it), and this bought us an extra 10-20% throughput per
+machine. It wasn’t as simple as just setting some command-line
+options, because GHC’s garbage collector is designed to run with N
+equal to the number of cores, so I had to make some changes to the way
+GHC schedules things to make this work.</p>
 <p>All these improvements are <a
-href="https://phabricator.haskell.org/rGHC76ee260778991367b8dbf07ecf7afd31f826c824">upstream <a
-href="https://phabricator.haskell.org/rGHCf703fd6b50f0ae58bc5f5ddb927a2ce28eeaddf6">in</a> <a
-href="https://phabricator.haskell.org/rGHCe68195a96529cf1cc2d9cc6a9bc05183fce5ecea">GHC</a>, and they’ll be available in GHC 8.2.1, due early 2017.</p>
+href="https://phabricator.haskell.org/rGHC76ee260778991367b8dbf07ecf7afd31f826c824">upstream
+<a
+href="https://phabricator.haskell.org/rGHCf703fd6b50f0ae58bc5f5ddb927a2ce28eeaddf6">in</a>
+<a
+href="https://phabricator.haskell.org/rGHCe68195a96529cf1cc2d9cc6a9bc05183fce5ecea">GHC</a>,
+and they’ll be available in GHC 8.2.1, due early 2017.</p>
 <h2 id="background-capabilities">Background: Capabilities</h2>
-<p>When the GHC runtime starts, it creates a number of <em>capabilities</em> (also sometimes called HEC, for Haskell Execution Context). The number of capabilities is determined by the <code>-N</code> flag when you start the Haskell program, e.g. <code>prog +RTS -N4</code> would run <code>prog</code> with 4 capabilities.</p>
-<p>A capability is the <em>ability to run Haskell code</em>. It consists of an allocation area (also called <em>nursery</em>) for allocating memory, a queue of lightweight Haskell threads to run, and one or more OS threads (called <em>workers</em>) that will run the Haskell code. Each capability can run a single Haskell thread at a time; if the Haskell thread blocks, the next Haskell thread in the queue runs, and so on.</p>
-<p>Typically we choose the number of capabilities to be equal to the number of physical cores on the machine. This makes sense: there is no advantage in trying to run more Haskell threads simultaneously than we have physical cores.</p>
+<p>When the GHC runtime starts, it creates a number of <em>capabilities</em>
+(also sometimes called HEC, for Haskell Execution Context). The
+number of capabilities is determined by the <code>-N</code> flag when you start
+the Haskell program, e.g. <code>prog +RTS -N4</code> would run <code>prog</code> with 4
+capabilities.</p>
+<p>A capability is the <em>ability to run Haskell code</em>. It consists of
+an allocation area (also called <em>nursery</em>) for allocating memory, a
+queue of lightweight Haskell threads to run, and one or more OS
+threads (called <em>workers</em>) that will run the Haskell code. Each
+capability can run a single Haskell thread at a time; if the Haskell
+thread blocks, the next Haskell thread in the queue runs, and so on.</p>
+<p>Typically we choose the number of capabilities to be equal to the
+number of physical cores on the machine. This makes sense: there is
+no advantage in trying to run more Haskell threads simultaneously than
+we have physical cores.</p>
 <h2 id="how-our-server-maps-onto-this">How our server maps onto this</h2>
-<p>Our system is based on the C++ Thrift server, which provides a fixed set of worker threads that pull requests from a queue and execute them. We choose the number of worker threads to be high enough that we can fully utilize the server, but not too high that we create too much contention and increase latency under maximum load.</p>
-<p>Each worker thread calls into Haskell via a <code>foreign export</code> to do the actual work. The GHC runtime then chooses a capability to run the call. It normally picks an idle capability, and the call executes immediately. If there are no idle capabilities, the call blocks on the queue of a capability until the capability yields control to it.</p>
+<p>Our system is based on the C++ Thrift server, which provides a fixed
+set of worker threads that pull requests from a queue and execute
+them. We choose the number of worker threads to be high enough that
+we can fully utilize the server, but not too high that we create too
+much contention and increase latency under maximum load.</p>
+<p>Each worker thread calls into Haskell via a <code>foreign export</code> to do the
+actual work. The GHC runtime then chooses a capability to run the
+call. It normally picks an idle capability, and the call executes
+immediately. If there are no idle capabilities, the call blocks on
+the queue of a capability until the capability yields control to it.</p>
 <h2 id="the-problem">The problem</h2>
-<p>At high load, even though we have enough threads to fully utilize the CPU cores, the intermediate layer of scheduling where GHC assigns threads to capabilities means that we sometimes have threads idle that could be running. Sometimes there are multiple runnable workers on one capability while other capabilities are idle, and the runtime takes a little while to load-balance during which time we’re not using all the available CPU capacity.</p>
-<p>Meanwhile the kernel is doing its own scheduling, trying to map those OS threads onto CPUs. Obviously the kernel has a rather more sophisticated scheduler than GHC and could do a better job of mapping those M threads onto its N cores, but we aren’t letting it. In this scenario, the extra layer of scheduling in GHC is just a drag on performance.</p>
+<p>At high load, even though we have enough threads to fully utilize the
+CPU cores, the intermediate layer of scheduling where GHC assigns
+threads to capabilities means that we sometimes have threads idle that
+could be running. Sometimes there are multiple runnable
+workers on one capability while other capabilities are idle, and the
+runtime takes a little while to load-balance during which time we’re
+not using all the available CPU capacity.</p>
+<p>Meanwhile the kernel is doing its own scheduling, trying to map those
+OS threads onto CPUs. Obviously the kernel has a rather more
+sophisticated scheduler than GHC and could do a better job of mapping
+those M threads onto its N cores, but we aren’t letting it. In this
+scenario, the extra layer of scheduling in GHC is just a drag on
+performance.</p>
 <h2 id="first-up-a-bug-in-the-load-balancer.">First up, a bug in the load-balancer.</h2>
-<p>While investigating this I found a <a href="https://phabricator.haskell.org/rGHC1fa92ca9b1ed4cf44e2745830c9e9ccc2bee12d5">bug in the way GHC’s load-balancing worked</a> - it could cause a large number of spurious wakeups of other capabilities while load-balancing. Fixing this was worth a few percent right away, but I had my sights set on larger gains.</p>
+<p>While investigating this I found a <a href="https://phabricator.haskell.org/rGHC1fa92ca9b1ed4cf44e2745830c9e9ccc2bee12d5">bug in the way GHC’s load-balancing
+worked</a> - it could cause a large number of spurious wakeups of other
+capabilities while load-balancing. Fixing this was worth a few
+percent right away, but I had my sights set on larger gains.</p>
 <h2 id="couldnt-we-just-increase-the-number-of-capabilities">Couldn’t we just increase the number of capabilities?</h2>
-<p>Well yes, and of course we tried just bumping up the <code>-N</code> value, but increasing <code>-N</code> beyond the number of cores just tends to increase CPU usage without increasing throughput.</p>
-<p>Why? Well, the problem is the garbage collector. The GC keeps all its threads running trying to steal work from each other, and when we have more threads than we have real cores, the spinning threads are slowing down the threads doing the actual work.</p>
+<p>Well yes, and of course we tried just bumping up the <code>-N</code> value, but
+increasing <code>-N</code> beyond the number of cores just tends to increase CPU
+usage without increasing throughput.</p>
+<p>Why? Well, the problem is the garbage collector. The GC keeps all its
+threads running trying to steal work from each other, and when we have
+more threads than we have real cores, the spinning threads are
+slowing down the threads doing the actual work.</p>
 <h2 id="increasing-the-number-of-capabilities-without-slowing-down-gc">Increasing the number of capabilities without slowing down GC</h2>
-<p>What we’d like to do is to have a larger set of mutator threads, but only use a subset of those when it’s time to GC. That’s exactly what this new flag does:</p>
+<p>What we’d like to do is to have a larger set of mutator threads, but
+only use a subset of those when it’s time to GC. That’s exactly what
+this new flag does:</p>
 <pre><code>+RTS -qn&lt;threads&gt;</code></pre>
-<p>For example, on a 24-core machine you might use <code>+RTS -N48 -qn24</code> to have 48 mutator threads, but only 24 threads during GC. This is great for using hyperthreads too, because hyperthreads work well for the mutator but not for the GC.</p>
-<p>Which threads does the runtime choose to do the GC? The scheduler has a heuristic which looks at which capabilities are currently inactive and chooses those to be idle, to avoid having to synchronise with threads that are currently asleep.</p>
+<p>For example, on a 24-core machine you might use <code>+RTS -N48 -qn24</code> to
+have 48 mutator threads, but only 24 threads during GC. This is great
+for using hyperthreads too, because hyperthreads work well for the
+mutator but not for the GC.</p>
+<p>Which threads does the runtime choose to do the GC? The scheduler has
+a heuristic which looks at which capabilities are currently inactive
+and chooses those to be idle, to avoid having to synchronise with
+threads that are currently asleep.</p>
 <h3 id="rts--qn-will-now-be-turned-on-by-default"><code>+RTS -qn</code> will now be turned on by default!</h3>
-<p>This is a slight digression, but it turns out that setting <code>+RTS -qn</code> to the number of CPU cores is always a good idea if <code>-N</code> is too large. So the runtime will be <a
-href="https://phabricator.haskell.org/rGHC6c47f2efa3f8f4639f375d34f54c01a60c9a1a82">doing this by default from now on</a>. If <code>-N</code> accidentally gets set too large, performance won’t drop quite so badly as it did with GHC 8.0 and earlier.</p>
+<p>This is a slight digression, but it turns out that setting <code>+RTS -qn</code>
+to the number of CPU cores is always a good idea if <code>-N</code> is too large.
+So the runtime will be <a
+href="https://phabricator.haskell.org/rGHC6c47f2efa3f8f4639f375d34f54c01a60c9a1a82">doing
+this by default from now on</a>. If <code>-N</code> accidentally gets set too
+large, performance won’t drop quite so badly as it did with GHC 8.0
+and earlier.</p>
 <h2 id="capability-affinity">Capability affinity</h2>
-<p>Now we can safely increase the number of capabilities well beyond the number of real cores, provided we set a smaller number of GC threads with <code>+RTS -qn</code>.</p>
-<p>The final step that we took in Sigma is to map our server threads 1:1 with capabilities. When the C++ server thread calls into Haskell, it immediately gets a capability, there’s never any blocking, and nor does the GHC runtime need to do any load-balancing.</p>
+<p>Now we can safely increase the number of capabilities well beyond the
+number of real cores, provided we set a smaller number of GC threads
+with <code>+RTS -qn</code>.</p>
+<p>The final step that we took in Sigma is to map our server threads 1:1
+with capabilities. When the C++ server thread calls into Haskell,
+it immediately gets a capability, there’s never any blocking, and nor
+does the GHC runtime need to do any load-balancing.</p>
 <p>How is this done? There’s a new C API exposed by the RTS:</p>
 <pre><code>void rts_setInCallCapability (int preferred_capability, int affinity);</code></pre>
-<p>In each thread you call this to map that thread to a particular capability. For example you might call it like this:</p>
+<p>In each thread you call this to map that thread to a particular
+capability. For example you might call it like this:</p>
 <pre><code>static std::atomic&lt;int&gt; counter;
 ...
 rts_setInCallCapability(counter.fetch_add(1), 0);</code></pre>
-<p>And ensure that you call this once per thread. The <code>affinity</code> argument is for binding a thread to a CPU core, which might be useful if you’re also using GHC’s affinity setting (<code>+RTS -qa</code>). In our case we haven’t found this to be useful.</p>
+<p>And ensure that you call this once per thread. The <code>affinity</code>
+argument is for binding a thread to a CPU core, which might be useful
+if you’re also using GHC’s affinity setting (<code>+RTS -qa</code>). In our case
+we haven’t found this to be useful.</p>
 <h2 id="future">Future</h2>
-<p>You might be thinking, <em>but isn’t the great thing about Haskell that we have lightweight threads?</em> Yes, absolutely. We do make use of lightweight threads in our system, but the main server threads that we inherit from the C++ Thrift server are heavyweight OS threads.</p>
-<p>Fortunately in our case we can fully load the system with 3-4 heavyweight threads per core, and this solution works nicely with the constraints of our platform. But if the ratio of I/O waiting to CPU work in our workload increased, we would need more threads per core to keep the CPU busy, and the balance tips towards wanting lightweight threads. Furthermore, using lightweight threads would make the system more resilient to increases in latency from downstream services.</p>
-<p>In the future we’ll probably move to lightweight threads, but in the meantime these changes to scheduling mean that we can squeeze all the available throughput from the existing architecture.</p>
+<p>You might be thinking, <em>but isn’t the great thing about Haskell
+that we have lightweight threads?</em> Yes, absolutely. We do make
+use of lightweight threads in our system, but the main server threads
+that we inherit from the C++ Thrift server are heavyweight OS threads.</p>
+<p>Fortunately in our case we can fully load the system with 3-4
+heavyweight threads per core, and this solution works nicely with the
+constraints of our platform. But if the ratio of I/O waiting to CPU
+work in our workload increased, we would need more threads per core to
+keep the CPU busy, and the balance tips towards wanting lightweight
+threads. Furthermore, using lightweight threads would make the system
+more resilient to increases in latency from downstream services.</p>
+<p>In the future we’ll probably move to lightweight threads, but in the
+meantime these changes to scheduling mean that we can squeeze all the
+available throughput from the existing architecture.</p>
 </div>
 ]]></summary>
 </entry>
@@ -505,8 +845,13 @@ rts_setInCallCapability(counter.fetch_add(1), 0);</code></pre>
     <summary type="html"><![CDATA[<div class="post">
   <h1 class="post-title">Haskell positions at Facebook</h1>
   <span class="post-date">August 24, 2016</span>
-  <p>Want to write Haskell for a living? At Facebook we’re looking for Spam Fighters. A large part of this job involves writing Haskell code to run on our Sigma/Haxl platform.</p>
-<p>It’s a fascinating and exciting area to work in, using state of the art tools and systems, working with amazing people, and of course you get to write Haskell every day. Come and see what it’s like to write Haskell code that runs at Facebook scale!</p>
+  <p>Want to write Haskell for a living? At Facebook we’re looking for
+Spam Fighters. A large part of this job involves writing Haskell code
+to run on our Sigma/Haxl platform.</p>
+<p>It’s a fascinating and exciting area to work in, using state of the
+art tools and systems, working with amazing people, and of course you
+get to write Haskell every day. Come and see what it’s like to write
+Haskell code that runs at Facebook scale!</p>
 <p><a
 href="https://www.facebook.com/careers/jobs/a0I1200000IA7KYEA1/">Job description and application</a></p>
 <p>Note: this is for the Menlo Park (California, USA) office.</p>
@@ -523,26 +868,49 @@ href="https://www.facebook.com/careers/jobs/a0I1200000IA7KYEA1/">Job description
   <h1 class="post-title">Stack traces in GHCi, coming in GHC 8.0.1</h1>
   <span class="post-date">February 12, 2016</span>
   <p><strong>tl;dr</strong></p>
-<p>In the upcoming GHC 8.0.1 release, if you start GHCi with <code>ghci -fexternal-interpreter -prof</code> (any packages you use must be built for profiling), then you get access to detailed stack traces for all the code you load into GHCi. Stack traces can be accessed via <code>assert</code>, <code>error</code>, <a
+<p>In the upcoming GHC 8.0.1 release, if you start GHCi with <code>ghci -fexternal-interpreter -prof</code> (any packages you use must be built for
+profiling), then you get access to detailed stack traces for all the
+code you load into GHCi. Stack traces can be accessed via <code>assert</code>,
+<code>error</code>, <a
 href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/Debug-Trace.html#v:traceStack">Debug.Trace.traceStack</a>, and the API in <a href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/GHC-Stack.html">GHC.Stack</a>.</p>
 <h2 id="background">Background</h2>
-<p>Haxl users at Facebook do a lot of development and testing inside GHCi. In fact, we’ve built a customized version of GHCi that runs code in our <code>Haxl</code> monad by default instead of the <code>IO</code> monad, and has a handful of extra commands to support common workflows needed by our developers.</p>
-<p>Some of our codebase is pre-compiled, but the code being actively worked on is just loaded on the fly into GHCi during development and run with the interpreter. This works surprisingly well even for large codebases like ours, especially if you enable parallel compilation and use a bigger heap (e.g. <code>ghci -j8 +RTS -A128m</code>). This is a pretty smooth setup: right inside GHCi we can test the production code against real data, and interact with all of the services that our production systems talk to, while having a nice interactive edit/compile/test cycle.</p>
-<p>However, one thing is missed by many developers, especially those coming from other languages: easy access to a <strong>stack trace</strong> when debugging. So, towards the end of last year, I set about finding a workable solution that we could deploy to our users without impacting their workflows.</p>
+<p>Haxl users at Facebook do a lot of development and testing inside
+GHCi. In fact, we’ve built a customized version of GHCi that runs
+code in our <code>Haxl</code> monad by default instead of the <code>IO</code> monad, and has
+a handful of extra commands to support common workflows needed by our
+developers.</p>
+<p>Some of our codebase is pre-compiled, but the code being actively
+worked on is just loaded on the fly into GHCi during development and
+run with the interpreter. This works surprisingly well even for large
+codebases like ours, especially if you enable parallel compilation and
+use a bigger heap (e.g. <code>ghci -j8 +RTS -A128m</code>). This is a pretty
+smooth setup: right inside GHCi we can test the production code against
+real data, and interact with all of the services that our production
+systems talk to, while having a nice interactive edit/compile/test
+cycle.</p>
+<p>However, one thing is missed by many developers, especially those
+coming from other languages: easy access to a <strong>stack trace</strong> when
+debugging. So, towards the end of last year, I set about finding a
+workable solution that we could deploy to our users without impacting
+their workflows.</p>
 <h2 id="show-me-a-stack-trace">Show me a stack trace!</h2>
 <p>To cut to the chase, in GHC 8.0.1 you can fire up ghci like this:</p>
 <pre><code>$ ghci -fexternal-interpreter -prof</code></pre>
-<p>and you have stack traces on, by default, for all the code you load into ghci. Let’s try an example.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import </span><span class="dt">Control.Exception</span>
-
-myTail xs <span class="fu">=</span> assert (not (null xs)) <span class="fu">$</span> tail xs
-
-<span class="ot">myMap ::</span> (a <span class="ot">-&gt;</span> b) <span class="ot">-&gt;</span> [a] <span class="ot">-&gt;</span> [b]
-myMap f [] <span class="fu">=</span> []
-myMap f (x<span class="fu">:</span>xs) <span class="fu">=</span> f x <span class="fu">:</span> myMap f xs
-
-main <span class="fu">=</span> print (myMap myTail [[<span class="dv">3</span>],[]])</code></pre></div>
-<p>We have a map-alike function called <code>myMap</code>, and a tail-alike function called <code>myTail</code>. We want to find out if <code>myTail</code> is called with an empty list, so we added an assert. Ok, so it’s a contrived example, but let’s see what happens:</p>
+<p>and you have stack traces on, by default, for all the code you load
+into ghci. Let’s try an example.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="dt">Control.Exception</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>myTail xs <span class="ot">=</span> assert (<span class="fu">not</span> (<span class="fu">null</span> xs)) <span class="op">$</span> <span class="fu">tail</span> xs</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ot">myMap ::</span> (a <span class="ot">-&gt;</span> b) <span class="ot">-&gt;</span> [a] <span class="ot">-&gt;</span> [b]</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>myMap f [] <span class="ot">=</span> []</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>myMap f (x<span class="op">:</span>xs) <span class="ot">=</span> f x <span class="op">:</span> myMap f xs</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>main <span class="ot">=</span> <span class="fu">print</span> (myMap myTail [[<span class="dv">3</span>],[]])</span></code></pre></div>
+<p>We have a map-alike function called <code>myMap</code>, and a tail-alike function
+called <code>myTail</code>. We want to find out if <code>myTail</code> is called with an
+empty list, so we added an assert. Ok, so it’s a contrived example,
+but let’s see what happens:</p>
 <pre><code>$ ghci -fexternal-interpreter -prof
 GHCi, version 8.1.20160127: http://www.haskell.org/ghc/  :? for help
 Prelude&gt; :l ~/scratch/tailtest.hs 
@@ -561,12 +929,24 @@ CallStack (from -prof):
   Main.main (/home/smarlow/scratch/tailtest.hs:9:15-35)
   Main.main (/home/smarlow/scratch/tailtest.hs:9:8-36)
 *Main&gt; </code></pre>
-<p>Now, we got two stack traces, both printed by <code>assert</code>. The first comes from <a
-href="http://downloads.haskell.org/~ghc/latest/docs/html/users_guide/other-type-extensions.html#special-implicit-params">ImplicitParams</a>, which knows the location of the call site of <code>assert</code> because <code>assert</code> has a special <code>?callStack :: CallStack</code> constraint in its type.</p>
-<p>The second stack trace is the new one, generated by GHCi running in <code>-prof</code> mode, and has the full call stack all the way from <code>main</code>, including the fact that <code>myTail</code> was called by <code>myMap</code>. That is, it’s a dynamic call stack, not a lexical one.</p>
+<p>Now, we got two stack traces, both printed by <code>assert</code>. The first
+comes from <a
+href="http://downloads.haskell.org/~ghc/latest/docs/html/users_guide/other-type-extensions.html#special-implicit-params">ImplicitParams</a>,
+which knows the location of the call site of <code>assert</code> because <code>assert</code>
+has a special <code>?callStack :: CallStack</code> constraint in its type.</p>
+<p>The second stack trace is the new one, generated by GHCi running in
+<code>-prof</code> mode, and has the full call stack all the way from <code>main</code>,
+including the fact that <code>myTail</code> was called by <code>myMap</code>. That is, it’s
+a dynamic call stack, not a lexical one.</p>
 <h2 id="dumping-the-stack-from-anywhere">Dumping the stack from anywhere</h2>
-<p>Using <code>assert</code> is one way to get access to a stack trace, but sometimes you just want to print out the stack when a particular condition is hit, or when a function is called, to see what’s going on. For this reason we have <a
-href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/Debug-Trace.html#v:traceStack"><code>Debug.Trace.traceStack</code></a>. This is like <code>trace</code>, but it also prints out the current stack trace. For example, I just picked a random place in the code of Happy, inserted a call to <code>traceStack</code>, loaded Happy into <code>ghci -fexternal-interpreter -prof</code>, ran it and got this:</p>
+<p>Using <code>assert</code> is one way to get access to a stack trace, but
+sometimes you just want to print out the stack when a particular
+condition is hit, or when a function is called, to see what’s going
+on. For this reason we have <a
+href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/Debug-Trace.html#v:traceStack"><code>Debug.Trace.traceStack</code></a>.
+This is like <code>trace</code>, but it also prints out the current stack trace.
+For example, I just picked a random place in the code of Happy,
+inserted a call to <code>traceStack</code>, loaded Happy into <code>ghci -fexternal-interpreter -prof</code>, ran it and got this:</p>
 <pre><code>closure1
 CallStack (from -prof):
   LALR.closure1.addItems.fn (LALR.lhs:106:28-48)
@@ -593,39 +973,101 @@ CallStack (from -prof):
   Main.main2 (Main.lhs:74:20-43)
   Main.main2 (Main.lhs:(64,9)-(78,61))
   Main.main (Main.lhs:57:9-18)</code></pre>
-<p>You’ll notice that each function appears on the stack multiple times—this is because the the annotations are based on scopes, and GHC tries to insert annotations in useful-looking places. There might well be room for refinement here in the future.</p>
+<p>You’ll notice that each function appears on the stack multiple
+times—this is because the the annotations are based on scopes, and
+GHC tries to insert annotations in useful-looking places. There might
+well be room for refinement here in the future.</p>
 <h2 id="any-drawbacks">Any drawbacks?</h2>
-<ol style="list-style-type: decimal">
-<li><p>You have to compile your packages with profiling. Use <code>--enable-library-profiling</code> when running Cabal, or set <code>library-profiling: True</code> in your <code>.cabal/config</code>, or do the Stack equivalent.</p></li>
-<li><p>Results with calls to <code>error</code> are mixed, because the <code>error</code> calls are often lifted to the top level as a CAF, which breaks the stack simulation that the profiler does. I have ideas for some workarounds for this that I plan to try in the future.</p></li>
-<li><p>Interpreted code will run more slowly. But this is only for debugging—we didn’t change the source code, so everything still runs at full speed when compiled normally. You can also pre-compile some of your code; don’t forget to use <code>-prof</code>, and add <code>-fprof-auto-calls</code> to get stack-trace annotations for the code you compile. You can <code>:set -fobject-code -fprof-auto-calls</code> inside GHCi itself to use compiled code by default.</p></li>
+<ol type="1">
+<li><p>You have to compile your packages with profiling. Use
+<code>--enable-library-profiling</code> when running Cabal, or set
+<code>library-profiling: True</code> in your <code>.cabal/config</code>, or do the Stack
+equivalent.</p></li>
+<li><p>Results with calls to <code>error</code> are mixed, because the <code>error</code> calls
+are often lifted to the top level as a CAF, which breaks the stack
+simulation that the profiler does. I have ideas for some workarounds
+for this that I plan to try in the future.</p></li>
+<li><p>Interpreted code will run more slowly. But this is only for
+debugging—we didn’t change the source code, so everything still runs
+at full speed when compiled normally. You can also pre-compile some
+of your code; don’t forget to use <code>-prof</code>, and add <code>-fprof-auto-calls</code>
+to get stack-trace annotations for the code you compile. You can
+<code>:set -fobject-code -fprof-auto-calls</code> inside GHCi itself to use
+compiled code by default.</p></li>
 </ol>
 <h2 id="how-does-it-work">How does it work?</h2>
-<p>We’re using the existing stack-simulation that happens in GHC’s profiler, called “cost-centre stacks”. However, running in profiled mode wasn’t supported by the interpreter, and there were some serious shenanigans involved to make it possible to run profiled code in GHCi without slowing down GHCi itself.</p>
-<p>There are various differences in the way the Haskell code runs in profiling mode. The layout of heap objects is different, because every heap object points to information about the call stack that created it. This is necessary to get accurate stack simulations in the presence of things like higher-order functions, but it’s also important for the heap profiler, so that it can tell who created each heap object. When running in profiling mode, we have to do various things to maintain the runtime’s simulation of the call stack.</p>
-<p>The first step was to make the interpreter itself work in profiling mode (as in, interpret code correctly and not crash). Fortunately this wasn’t nearly as difficult as I’d anticipated: the interpreter and byte-code compiler were already nicely abstracted over the things that change in profiling mode. At this point we can already do things that weren’t possible before: profile GHCi itself, and profile Template Haskell.</p>
-<p>Next, I had to make the interpreter actually simulate the call stack for interpreted code. Again, this was reasonably straightforward, and involved using the breakpoints that GHCi already inserts into the interpreted code as SCC annotations for the profiler.</p>
-<p>So far so good: this actually worked quite nicely, but there was one huge drawback. To actually use it, we have to compile GHC itself with profiling. Which works, except that it slows down GHCi when compiling code by a factor of 2-3. That was too big a hit to deploy this as part of the standard workflow for our Haxl users at Facebook, so I needed to find a way to make it work without the overhead on the compiler.</p>
+<p>We’re using the existing stack-simulation that happens in GHC’s
+profiler, called “cost-centre stacks”. However, running in profiled
+mode wasn’t supported by the interpreter, and there were some serious
+shenanigans involved to make it possible to run profiled code in GHCi
+without slowing down GHCi itself.</p>
+<p>There are various differences in the way the Haskell code runs in
+profiling mode. The layout of heap objects is different, because every
+heap object points to information about the call stack that created
+it. This is necessary to get accurate stack simulations in the
+presence of things like higher-order functions, but it’s also
+important for the heap profiler, so that it can tell who created each
+heap object. When running in profiling mode, we have to do various
+things to maintain the runtime’s simulation of the call stack.</p>
+<p>The first step was to make the interpreter itself work in profiling
+mode (as in, interpret code correctly and not crash). Fortunately
+this wasn’t nearly as difficult as I’d anticipated: the interpreter
+and byte-code compiler were already nicely abstracted over the things
+that change in profiling mode. At this point we can already do things
+that weren’t possible before: profile GHCi itself, and profile
+Template Haskell.</p>
+<p>Next, I had to make the interpreter actually simulate the call stack
+for interpreted code. Again, this was reasonably straightforward, and
+involved using the breakpoints that GHCi already inserts into the
+interpreted code as SCC annotations for the profiler.</p>
+<p>So far so good: this actually worked quite nicely, but there was one
+huge drawback. To actually use it, we have to compile GHC itself with
+profiling. Which works, except that it slows down GHCi when
+compiling code by a factor of 2-3. That was too big a hit to deploy
+this as part of the standard workflow for our Haxl users at Facebook,
+so I needed to find a way to make it work without the overhead on the
+compiler.</p>
 <h3 id="enter-remote-ghci">Enter Remote GHCi</h3>
-<p>The solution is to separate the compiler from the interpreter, using a scheme that I’ve called Remote GHCi. The idea is that by putting the compiler and the interpreter in separate processes, the compiler can be running at full speed on a normal non-profiled runtime, while the interpreter is running in a separate process using the profiled runtime.</p>
-<div class="figure">
-<img src="/images/ghc-iserv.png" />
-
-</div>
-<p>The main complication is arranging that all the interactions between the compiler and the interpreter happen via serialized messages over a pipe. We currently have about 50 different message types, you can see them all <a
-href="https://phabricator.haskell.org/diffusion/GHC/browse/master/libraries/ghci/GHCi/Message.hs">here</a>. We’re currently using the <code>binary</code> library together with <code>Generic</code> instance generation, but serialization and deserialization using <code>binary</code> is definitely a bottleneck so I’m looking forward to moving to the new CBOR-based serialization library when it’s ready.</p>
-<p>It turns out that making this separation has a number of advantages aside from stack traces, which are listed on <a
-href="https://ghc.haskell.org/trac/ghc/wiki/RemoteGHCi">the RemoteGHCi wiki page</a>.</p>
-<p>GHCJS has been doing something similar for a while to support Template Haskell. In fact, I used the GHCJS Template Haskell code as a starting point, integrated it with GHC proper and built it out to fully support GHCi (with a couple of exceptions, notably the debugger doesn’t currently work, and <code>dynCompileExpr</code> in the GHC API cannot be supported in general).</p>
-<p>Remote GHCi also works for Template Haskell and Quasi Quotes, and has the advantage that when compiling TH code with <code>-prof -fexternal-interpreter</code>, you don’t need to first compile it without <code>-prof</code>, because we can run the <code>-prof</code> code directly in the external interpreter process.</p>
+<p>The solution is to separate the compiler from the interpreter, using a
+scheme that I’ve called Remote GHCi. The idea is that by putting the
+compiler and the interpreter in separate processes, the compiler can
+be running at full speed on a normal non-profiled runtime, while the
+interpreter is running in a separate process using the profiled
+runtime.</p>
+<p><img src="/images/ghc-iserv.png" /></p>
+<p>The main complication is arranging that all the interactions between
+the compiler and the interpreter happen via serialized messages over a
+pipe. We currently have about 50 different message types, you can see
+them all <a
+href="https://phabricator.haskell.org/diffusion/GHC/browse/master/libraries/ghci/GHCi/Message.hs">here</a>.
+We’re currently using the <code>binary</code> library together with <code>Generic</code>
+instance generation, but serialization and deserialization using
+<code>binary</code> is definitely a bottleneck so I’m looking forward to moving
+to the new CBOR-based serialization library when it’s ready.</p>
+<p>It turns out that making this separation has a number of advantages
+aside from stack traces, which are listed on <a
+href="https://ghc.haskell.org/trac/ghc/wiki/RemoteGHCi">the RemoteGHCi
+wiki page</a>.</p>
+<p>GHCJS has been doing something similar for a while to support Template
+Haskell. In fact, I used the GHCJS Template Haskell code as a
+starting point, integrated it with GHC proper and built it out to
+fully support GHCi (with a couple of exceptions, notably the debugger
+doesn’t currently work, and <code>dynCompileExpr</code> in the GHC API cannot be
+supported in general).</p>
+<p>Remote GHCi also works for Template Haskell and Quasi Quotes, and has
+the advantage that when compiling TH code with <code>-prof -fexternal-interpreter</code>, you don’t need to first compile it without
+<code>-prof</code>, because we can run the <code>-prof</code> code directly in the external
+interpreter process.</p>
 <h2 id="three-kinds-of-stack-trace-in-ghc-8.0.1">Three kinds of stack trace in GHC 8.0.1</h2>
-<p>There’s a lot happening on the stack trace front. We now have no less than three ways to get a stack trace:</p>
+<p>There’s a lot happening on the stack trace front. We now have no less
+than three ways to get a stack trace:</p>
 <ul>
 <li>Profiling: <code>ghc -prof -fprof-auto</code> and <code>ghci -fexternal-interprter -prof</code></li>
 <li>ImplicitParams, with the magic <code>?callStack :: CallStack</code> constraint (now called <code>HasCallStack</code>).</li>
 <li>DWARF: <code>ghc -g</code></li>
 </ul>
-<p>Each of these has advantages and disadvantages, and none of them are subsumed by any of the others (sadly!). I’ll try to summarise:</p>
+<p>Each of these has advantages and disadvantages, and none of them are
+subsumed by any of the others (sadly!). I’ll try to summarise:</p>
 <ul>
 <li><p><strong>Profiling</strong></p>
 <ul>
@@ -639,29 +1081,47 @@ href="https://ghc.haskell.org/trac/ghc/wiki/RemoteGHCi">the RemoteGHCi wiki page
 </ul></li>
 <li><p><strong>ImplicitParams</strong></p>
 <ul>
-<li>Good for finding the call site of particular functions, like <code>error</code> or <code>undefined</code></li>
+<li>Good for finding the call site of particular functions, like
+<code>error</code> or <code>undefined</code></li>
 </ul>
 <p>But:</p>
 <ul>
 <li>Requires explicit code changes to propagate the stack</li>
-<li>Some runtime overhead (stacks get constructed and passed around at runtime)</li>
+<li>Some runtime overhead (stacks get constructed and passed around at
+runtime)</li>
 <li>Shows up in types as <code>HasCallStack</code> constraints</li>
-<li>Lexical, not dynamic. (In <code>g = map f</code>, <code>g</code> calls <code>f</code> rather than <code>map</code> calling <code>f</code>)</li>
+<li>Lexical, not dynamic. (In <code>g = map f</code>, <code>g</code> calls <code>f</code> rather than
+<code>map</code> calling <code>f</code>)</li>
 </ul>
-<p>Could you change GHC so that it automatically adds <code>HasCallStack</code> constraints everywhere and also hides them from the user, to get the effect of full call-stack coverage? Maybe - that would be an alternative to the scheme I’ve implemented on top of profiling. One difficult area is CAFs, though. If a constraint is added to a CAF, then the CAF is re-evaluated each time it is called, which is obviously undesirable. The profiler goes to some lengths to avoid changing the asymptotic cost of things, but trades off some information in the stack simulation in the process, which is why calls to <code>error</code> sometimes don’t get accurate call stack information.</p></li>
+<p>Could you change GHC so that it automatically adds <code>HasCallStack</code>
+constraints everywhere and also hides them from the user, to get
+the effect of full call-stack coverage? Maybe - that would be an
+alternative to the scheme I’ve implemented on top of profiling.
+One difficult area is CAFs, though. If a constraint is added to a
+CAF, then the CAF is re-evaluated each time it is called, which is
+obviously undesirable. The profiler goes to some lengths to avoid
+changing the asymptotic cost of things, but trades off some information in
+the stack simulation in the process, which is why calls to <code>error</code>
+sometimes don’t get accurate call stack information.</p></li>
 <li><p><strong>DWARF</strong></p>
 <ul>
 <li>No runtime overhead, can be deployed in production.</li>
-<li>Good when you’re not willing to sacrifice any performance, but having some information is better than none when something goes wrong.</li>
+<li>Good when you’re not willing to sacrifice any performance, but
+having some information is better than none when something goes
+wrong.</li>
 </ul>
 <p>But:</p>
 <ul>
-<li>Gives the raw execution stack, so we lose information due to tail-calls and lazy evaluation.</li>
+<li>Gives the raw execution stack, so we lose information due to
+tail-calls and lazy evaluation.</li>
 </ul></li>
 </ul>
 <h2 id="conclusion">Conclusion</h2>
-<p>We now have full stack traces inside GHCi, provided you compile your packages for profiling, and use <code>ghci -fexternal-interpreter -prof</code>.</p>
-<p>Remote GHCi is not the default in GHC 8.0.1, but it’s available with the flag <code>-fexternal-interpreter</code>. Please try it out and let me know how you get on!</p>
+<p>We now have full stack traces inside GHCi, provided you compile your
+packages for profiling, and use <code>ghci -fexternal-interpreter -prof</code>.</p>
+<p>Remote GHCi is not the default in GHC 8.0.1, but it’s available with
+the flag <code>-fexternal-interpreter</code>. Please try it out and let me know
+how you get on!</p>
 </div>
 ]]></summary>
 </entry>
@@ -675,15 +1135,39 @@ href="https://ghc.haskell.org/trac/ghc/wiki/RemoteGHCi">the RemoteGHCi wiki page
   <h1 class="post-title">Fun With Haxl (Part 1)</h1>
   <span class="post-date">October 20, 2015</span>
   <p>This is a blog-post version of a talk I recently gave at the <a
-href="https://skillsmatter.com/conferences/7069-haskell-exchange-2015">Haskell eXchange 2015</a>. The video of the talk is <a
-href="https://skillsmatter.com/skillscasts/6644-keynote-from-simon-marlow">here</a>, but there were a lot of questions during the talk which aren’t very audible on the video, so hopefully this post will be useful to folks who weren’t at the event.</p>
-<p>If you want to play with the examples yourself, the code is available <a href="https://github.com/simonmar/haskell-eXchange-2015">on github</a>, and to run the examples you’ll need to <code>cabal install haxl sqlite</code> first, or the <code>stack</code> equivalent.</p>
+href="https://skillsmatter.com/conferences/7069-haskell-exchange-2015">Haskell
+eXchange 2015</a>. The video of the talk is <a
+href="https://skillsmatter.com/skillscasts/6644-keynote-from-simon-marlow">here</a>,
+but there were a lot of questions during the talk which aren’t very
+audible on the video, so hopefully this post will be useful to folks
+who weren’t at the event.</p>
+<p>If you want to play with the examples yourself, the code is available
+<a href="https://github.com/simonmar/haskell-eXchange-2015">on
+github</a>, and to run the examples you’ll need to <code>cabal install haxl sqlite</code> first, or the <code>stack</code> equivalent.</p>
 <h2 id="what-is-haxl">What is Haxl?</h2>
-<p><a href="https://github.com/facebook/Haxl">Haxl</a> is a library that was developed for solving a very specific problem at Facebook: we wanted to write purely functional code, including data-fetching operations, and have the data-fetches automatically batched and performed concurrently as far as possible. This is exactly what Haxl does, and it has been <a
-href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">running in production at Facebook</a> as part of the anti-abuse infrastructure for nearly a year now.</p>
-<p>Although it was designed for this specific purpose, we can put Haxl to use for a wide range of tasks where implicit concurrency is needed: not just data-fetching, but other remote data operations (including writes), and it works perfectly well for batching and overlapping local I/O operations too. In this blog post (series) I’ll start by reflecting on how to use Haxl for what it was intended for, and then move on to give examples of some of the other things we can use Haxl for. In the final example, I’ll use Haxl to implement a parallel build system.</p>
+<p><a href="https://github.com/facebook/Haxl">Haxl</a> is a library that
+was developed for solving a very specific problem at Facebook: we
+wanted to write purely functional code, including data-fetching
+operations, and have the data-fetches automatically batched and
+performed concurrently as far as possible. This is exactly what Haxl
+does, and it has been <a
+href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">running
+in production at Facebook</a> as part of the anti-abuse infrastructure
+for nearly a year now.</p>
+<p>Although it was designed for this specific purpose, we can put Haxl to
+use for a wide range of tasks where implicit concurrency is needed:
+not just data-fetching, but other remote data operations (including
+writes), and it works perfectly well for batching and overlapping
+local I/O operations too. In this blog post (series) I’ll start by
+reflecting on how to use Haxl for what it was intended for, and then
+move on to give examples of some of the other things we can use Haxl
+for. In the final example, I’ll use Haxl to implement a parallel
+build system.</p>
 <h2 id="example-accessing-data-for-a-blog">Example: accessing data for a blog</h2>
-<p>Let’s suppose you’re writing a blog (an old-fashioned one with dynamically-generated pages!) and you want to store the content and metadata for the blog in a database. I’ve made an example database called <code>blog.sqlite</code>, and we can poke around to see what’s in it:</p>
+<p>Let’s suppose you’re writing a blog (an old-fashioned one with
+dynamically-generated pages!) and you want to store the content and
+metadata for the blog in a database. I’ve made an example database
+called <code>blog.sqlite</code>, and we can poke around to see what’s in it:</p>
 <pre><code>$ sqlite3 blog.sqlite
 SQLite version 3.8.2 2013-12-06 14:53:30
 Enter &quot;.help&quot; for instructions
@@ -704,20 +1188,33 @@ sqlite&gt; select * from postcontent;
 2|example content 2
 3|example content 3
 ...</code></pre>
-<p>There are a couple of tables that we’re interested in: <code>postinfo</code>, which contains the metadata, and <code>postcontent</code>, which contains the content. Both are indexed by <code>postid</code>, an integer key for each post.</p>
-<p>Now, let’s make a little Haskell API for accessing the blog data. I’ll do this twice: first by calling an SQL library directly, and then using Haxl, to compare the two.</p>
-<p>The code for the direct implementation is in <a href="https://github.com/simonmar/haskell-eXchange-2015/blob/3ae0e34a051201eb77721bee2e940ec1f764a0df/BlogDB.hs">BlogDB.hs</a>, using the simple <code>sqlite</code> package for accessing the sqlite DB (there are other more elaborate and type-safe abstractions for accessing databases, but that is orthogonal to the issues we’re interested in here, so I’m using <code>sqlite</code> to keep things simple).</p>
-<p>In our simple API, there’s a monad, <code>Blog</code>, in which we can access the blog data, a function <code>run</code> for executing a <code>Blog</code> computation, and two operations, <code>getPostIds</code> and <code>getPostContent</code> for making specific queries in the <code>Blog</code> monad. To summarise:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Blog</span> a  <span class="co">-- a monad</span>
-
-<span class="ot">run ::</span> <span class="dt">Blog</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> a
-
-<span class="kw">type</span> <span class="dt">PostId</span> <span class="fu">=</span> <span class="dt">Int</span>
-<span class="kw">type</span> <span class="dt">PostContent</span> <span class="fu">=</span> <span class="dt">String</span>
-
-<span class="ot">getPostIds     ::</span> <span class="dt">Blog</span> [<span class="dt">PostId</span>]
-<span class="ot">getPostContent ::</span> <span class="dt">PostId</span> <span class="ot">-&gt;</span> <span class="dt">Blog</span> <span class="dt">PostContent</span></code></pre></div>
-<p>The implementation of the API will print out the queries it is making, so that we can see what’s happening when we call these functions. Let’s use this API to query our example DB:</p>
+<p>There are a couple of tables that we’re interested in: <code>postinfo</code>,
+which contains the metadata, and <code>postcontent</code>, which contains the
+content. Both are indexed by <code>postid</code>, an integer key for each post.</p>
+<p>Now, let’s make a little Haskell API for accessing the blog data.
+I’ll do this twice: first by calling an SQL library directly, and then
+using Haxl, to compare the two.</p>
+<p>The code for the direct implementation is in <a href="https://github.com/simonmar/haskell-eXchange-2015/blob/3ae0e34a051201eb77721bee2e940ec1f764a0df/BlogDB.hs">BlogDB.hs</a>, using
+the simple <code>sqlite</code> package for accessing the sqlite DB (there are
+other more elaborate and type-safe abstractions for accessing
+databases, but that is orthogonal to the issues we’re interested in
+here, so I’m using <code>sqlite</code> to keep things simple).</p>
+<p>In our simple API, there’s a monad, <code>Blog</code>, in which we can access the
+blog data, a function <code>run</code> for executing a <code>Blog</code> computation, and
+two operations, <code>getPostIds</code> and <code>getPostContent</code> for making specific
+queries in the <code>Blog</code> monad. To summarise:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">Blog</span> a  <span class="co">-- a monad</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ot">run ::</span> <span class="dt">Blog</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> a</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">PostId</span> <span class="ot">=</span> <span class="dt">Int</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">PostContent</span> <span class="ot">=</span> <span class="dt">String</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="ot">getPostIds     ::</span> <span class="dt">Blog</span> [<span class="dt">PostId</span>]</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="ot">getPostContent ::</span> <span class="dt">PostId</span> <span class="ot">-&gt;</span> <span class="dt">Blog</span> <span class="dt">PostContent</span></span></code></pre></div>
+<p>The implementation of the API will print out the queries it is making,
+so that we can see what’s happening when we call these functions.
+Let’s use this API to query our example DB:</p>
 <pre><code>GHCi, version 7.11.20150924: http://www.haskell.org/ghc/  :? for help
 [1 of 1] Compiling BlogDB           ( BlogDB.hs, interpreted )
 Ok, modules loaded: BlogDB.
@@ -741,23 +1238,34 @@ select content from postcontent where postid = 12;
 [&quot;example content 1&quot;,&quot;example content 2&quot;,&quot;example content 3&quot;,&quot;example content 4&quot;,&quot;example content 5&quot;,&quot;example content 6&quot;,&quot;example content 7&quot;,&quot;example content 8&quot;,&quot;example content 9&quot;,&quot;example content 10&quot;,&quot;example content 11&quot;,&quot;example content 12&quot;]
 *BlogDB&gt; </code></pre>
 <h2 id="the-problem-batching-queries">The problem: batching queries</h2>
-<p>Now, the issue with this API is that every call to <code>getPostContent</code> results in a separate <code>select</code> query. The <code>mapM</code> call in the above example gave rise to one <code>select</code> query to fetch the contents of each post separately.</p>
+<p>Now, the issue with this API is that every call to <code>getPostContent</code>
+results in a separate <code>select</code> query. The <code>mapM</code> call in the above
+example gave rise to one <code>select</code> query to fetch the contents of each
+post separately.</p>
 <p>Ideally, rather than</p>
 <pre><code>select content from postcontent where postid = 1;
 select content from postcontent where postid = 2;
 select content from postcontent where postid = 3;</code></pre>
 <p>What we would like to see is something like</p>
 <pre><code>select content from postcontent where postid in (1,2,3);</code></pre>
-<p>This kind of batching is particularly important when the database is remote, or large, or both.</p>
+<p>This kind of batching is particularly important when the database is
+remote, or large, or both.</p>
 <p>One way to solve the problem is to add a new API for this query, e.g.:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">multiGetPostContents ::</span> [<span class="dt">PostId</span>] <span class="ot">-&gt;</span> <span class="dt">IO</span> [<span class="dt">PostContent</span>]</code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ot">multiGetPostContents ::</span> [<span class="dt">PostId</span>] <span class="ot">-&gt;</span> <span class="dt">IO</span> [<span class="dt">PostContent</span>]</span></code></pre></div>
 <p>But there are several problems with this:</p>
 <ul>
 <li><p>Clients have to remember to call it, rather than using <code>mapM</code>.</p></li>
-<li><p>If we’re fetching post content in multiple parts of our code, we would have to arrange to do the fetching in one place and plumb the results to the places that need the data, which might involve restructuring our code in an unnatural way, purely for efficiency reasons.</p></li>
-<li><p>From a taste perspective, <code>multiGetPostContents</code> duplicates the functionality of <code>mapM getPostContent</code>, which is ugly.</p></li>
+<li><p>If we’re fetching post content in multiple parts of our code, we
+would have to arrange to do the fetching in one place and plumb the
+results to the places that need the data, which might involve
+restructuring our code in an unnatural way, purely for efficiency
+reasons.</p></li>
+<li><p>From a taste perspective, <code>multiGetPostContents</code> duplicates
+the functionality of <code>mapM getPostContent</code>, which is ugly.</p></li>
 </ul>
-<p>This is the problem that Haxl was designed to solve. We’ll look at how to implement this API on top of Haxl in the next couple of sections, but just to demonstrate the effect, let’s try it out first:</p>
+<p>This is the problem that Haxl was designed to solve. We’ll look at
+how to implement this API on top of Haxl in the next couple of sections, but
+just to demonstrate the effect, let’s try it out first:</p>
 <pre><code>Prelude&gt; :l HaxlBlog
 [1 of 2] Compiling BlogDataSource   ( BlogDataSource.hs, interpreted )
 [2 of 2] Compiling HaxlBlog         ( HaxlBlog.hs, interpreted )
@@ -767,77 +1275,124 @@ select postid from postinfo;
 select postid,content from postcontent where postid in (12,11,10,9,8,7,6,5,4,3,2,1)
 [&quot;example content 1&quot;,&quot;example content 2&quot;,&quot;example content 3&quot;,&quot;example content 4&quot;,&quot;example content 5&quot;,&quot;example content 6&quot;,&quot;example content 7&quot;,&quot;example content 8&quot;,&quot;example content 9&quot;,&quot;example content 10&quot;,&quot;example content 11&quot;,&quot;example content 12&quot;]
 *HaxlBlog&gt;</code></pre>
-<p>Even though we used the standard <code>mapM</code> function to perform multiple <code>getPostContent</code> calls, they were batched together and executed as a single <code>select</code> query.</p>
+<p>Even though we used the standard <code>mapM</code> function to perform multiple
+<code>getPostContent</code> calls, they were batched together and executed as a
+single <code>select</code> query.</p>
 <h2 id="introduction-to-haxl">Introduction to Haxl</h2>
 <p>You can find the full documentation for Haxl <a
-href="http://hackage.haskell.org/package/haxl">here</a>, but in this section I’ll walk through the most important parts, and then we’ll implement our own data source for the blog database.</p>
+href="http://hackage.haskell.org/package/haxl">here</a>, but in this
+section I’ll walk through the most important parts, and then we’ll
+implement our own data source for the blog database.</p>
 <p>Haxl is a Monad:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">newtype</span> <span class="dt">GenHaxl</span> u a
-
-<span class="kw">instance</span> <span class="dt">Functor</span> (<span class="dt">GenHaxl</span> u)
-<span class="kw">instance</span> <span class="dt">Applicative</span> (<span class="dt">GenHaxl</span> u)
-<span class="kw">instance</span> <span class="dt">Monad</span> (<span class="dt">GenHaxl</span> u)</code></pre></div>
-<p>It is generalised over a type variable <code>u</code>, which can be used to pass around some user-defined data throughout a Haxl computation. For example, in our application at Facebook we instantiate <code>u</code> with the data passed in with the request that we’re processing.</p>
-<p>Essentially there is a <code>Reader</code> monad built-in to Haxl. (this might not be the cleanest design, but it is the way it is.) Throughout the following we’re not going to be using the <code>u</code> parameter, and I’ll often instantiate it with <code>()</code>, like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Haxl</span> a <span class="fu">=</span> <span class="dt">GenHaxl</span> () a</code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">newtype</span> <span class="dt">GenHaxl</span> u a</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> <span class="dt">Functor</span> (<span class="dt">GenHaxl</span> u)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> <span class="dt">Applicative</span> (<span class="dt">GenHaxl</span> u)</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> <span class="dt">Monad</span> (<span class="dt">GenHaxl</span> u)</span></code></pre></div>
+<p>It is generalised over a type variable <code>u</code>, which can be used to pass
+around some user-defined data throughout a Haxl computation. For
+example, in our application at Facebook we instantiate <code>u</code> with the
+data passed in with the request that we’re processing.</p>
+<p>Essentially there is a <code>Reader</code> monad built-in to Haxl. (this might
+not be the cleanest design, but it is the way it is.) Throughout the
+following we’re not going to be using the <code>u</code> parameter, and I’ll
+often instantiate it with <code>()</code>, like this:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">Haxl</span> a <span class="ot">=</span> <span class="dt">GenHaxl</span> () a</span></code></pre></div>
 <p>The most important operation in Haxl is <code>dataFetch</code>:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">dataFetch ::</span> (<span class="dt">DataSource</span> u r, <span class="dt">Request</span> r a) <span class="ot">=&gt;</span> r a <span class="ot">-&gt;</span> <span class="dt">GenHaxl</span> u a</code></pre></div>
-<p>This is how a user of Haxl fetches some data from a <em>data source</em> (in our example, from the blog database). The Haxl library is designed so that you can use multiple user-defined data sources simultaneously.</p>
-<p>The argument of type <code>r a</code> is a request, where <code>r</code> is the request type constructor, and <code>a</code> is the type of the result we’re expecting. The <code>r</code> type is defined by the data source you’re using, which should also supply appropriate instances of <code>DataSource</code> and <code>Request</code>. For example, the request type for our blog looks like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">BlogRequest</span> a <span class="kw">where</span>
-  <span class="dt">FetchPosts</span><span class="ot">       ::</span> <span class="dt">BlogRequest</span> [<span class="dt">PostId</span>]
-  <span class="dt">FetchPostContent</span><span class="ot"> ::</span> <span class="dt">PostId</span> <span class="ot">-&gt;</span> <span class="dt">BlogRequest</span> <span class="dt">PostContent</span></code></pre></div>
-<p>Note that we’re using a GADT, because we have two different requests which each produce a result of a different type.</p>
-<p>Next, our request type needs to satisfy the <code>Request</code> constraint. <code>Request</code> is defined like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Request</span> req a <span class="fu">=</span>
-  ( <span class="dt">Eq</span> (req a)
-  , <span class="dt">Hashable</span> (req a)
-  , <span class="dt">Typeable</span> (req a)
-  , <span class="dt">Show</span> (req a)
-  , <span class="dt">Show</span> a
-  )</code></pre></div>
-<p>That is, it is a synonym for a handful of type class constraints that are all straightforward boilerplate. (defining constraint-synonyms like this requires the <code>ConstraintKinds</code> extension, and it’s a handy trick to know).</p>
-<p>The other constraint we need to satisfy is <code>DataSource</code>, which is defined like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">class</span> (<span class="dt">DataSourceName</span> req, <span class="dt">StateKey</span> req, <span class="dt">Show1</span> req)
-       <span class="ot">=&gt;</span> <span class="dt">DataSource</span> u req <span class="kw">where</span>
-  fetch
-<span class="ot">    ::</span> <span class="dt">State</span> req
-    <span class="ot">-&gt;</span> <span class="dt">Flags</span>
-    <span class="ot">-&gt;</span> u
-    <span class="ot">-&gt;</span> [<span class="dt">BlockedFetch</span> req]
-    <span class="ot">-&gt;</span> <span class="dt">PerformFetch</span></code></pre></div>
-<p><code>DataSource</code> has a single method, <code>fetch</code>, which is used by Haxl to execute requests for this data source. The key point is that <code>fetch</code> is passed a list of <code>BlockedFetch</code> values, each of which contains a single request. The <code>BlockedFetch</code> type is defined like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">BlockedFetch</span> r <span class="fu">=</span> forall a<span class="fu">.</span> <span class="dt">BlockedFetch</span> (r a) (<span class="dt">ResultVar</span> a)</code></pre></div>
-<p>That is, it contains a request of type <code>r a</code>, and a <code>ResultVar a</code> which is a container to store the result in. The <code>fetch</code> implementation can store the result using one of these two functions:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">putSuccess ::</span> <span class="dt">ResultVar</span> a <span class="ot">-&gt;</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
-<span class="ot">putFailure ::</span> (<span class="dt">Exception</span> e) <span class="ot">=&gt;</span> <span class="dt">ResultVar</span> a <span class="ot">-&gt;</span> e <span class="ot">-&gt;</span> <span class="dt">IO</span> ()</code></pre></div>
-<p>Because <code>fetch</code> is passed a <em>list</em> of <code>BlockedFetch</code>, it can collect together requests and satisfy them using a single query to the database, or perform them concurrently, or use whatever methods are available for performing multiple requests simultaneously.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="ot">dataFetch ::</span> (<span class="dt">DataSource</span> u r, <span class="dt">Request</span> r a) <span class="ot">=&gt;</span> r a <span class="ot">-&gt;</span> <span class="dt">GenHaxl</span> u a</span></code></pre></div>
+<p>This is how a user of Haxl fetches some data from a <em>data source</em>
+(in our example, from the blog database). The Haxl library is designed
+so that you can use multiple user-defined data sources simultaneously.</p>
+<p>The argument of type <code>r a</code> is a request, where <code>r</code> is the request type
+constructor, and <code>a</code> is the type of the result we’re expecting. The
+<code>r</code> type is defined by the data source you’re using, which should also
+supply appropriate instances of <code>DataSource</code> and <code>Request</code>. For
+example, the request type for our blog looks like this:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">data</span> <span class="dt">BlogRequest</span> a <span class="kw">where</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">FetchPosts</span><span class="ot">       ::</span> <span class="dt">BlogRequest</span> [<span class="dt">PostId</span>]</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">FetchPostContent</span><span class="ot"> ::</span> <span class="dt">PostId</span> <span class="ot">-&gt;</span> <span class="dt">BlogRequest</span> <span class="dt">PostContent</span></span></code></pre></div>
+<p>Note that we’re using a GADT, because we have two different requests
+which each produce a result of a different type.</p>
+<p>Next, our request type needs to satisfy the <code>Request</code> constraint.
+<code>Request</code> is defined like this:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">Request</span> req a <span class="ot">=</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  ( <span class="dt">Eq</span> (req a)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  , <span class="dt">Hashable</span> (req a)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  , <span class="dt">Typeable</span> (req a)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  , <span class="dt">Show</span> (req a)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  , <span class="dt">Show</span> a</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div>
+<p>That is, it is a synonym for a handful of type class constraints that
+are all straightforward boilerplate. (defining constraint-synonyms
+like this requires the <code>ConstraintKinds</code> extension, and it’s a handy
+trick to know).</p>
+<p>The other constraint we need to satisfy is <code>DataSource</code>, which is
+defined like this:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> (<span class="dt">DataSourceName</span> req, <span class="dt">StateKey</span> req, <span class="dt">Show1</span> req)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>       <span class="ot">=&gt;</span> <span class="dt">DataSource</span> u req <span class="kw">where</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  fetch</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="ot">    ::</span> <span class="dt">State</span> req</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="ot">-&gt;</span> <span class="dt">Flags</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="ot">-&gt;</span> u</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="ot">-&gt;</span> [<span class="dt">BlockedFetch</span> req]</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="ot">-&gt;</span> <span class="dt">PerformFetch</span></span></code></pre></div>
+<p><code>DataSource</code> has a single method, <code>fetch</code>, which is used by Haxl to
+execute requests for this data source. The key point is that <code>fetch</code>
+is passed a list of <code>BlockedFetch</code> values, each of which contains
+a single request. The <code>BlockedFetch</code> type is defined like this:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">data</span> <span class="dt">BlockedFetch</span> r <span class="ot">=</span> <span class="kw">forall</span> a<span class="op">.</span> <span class="dt">BlockedFetch</span> (r a) (<span class="dt">ResultVar</span> a)</span></code></pre></div>
+<p>That is, it contains a request of type <code>r a</code>, and a <code>ResultVar a</code>
+which is a container to store the result in. The <code>fetch</code>
+implementation can store the result using one of these two functions:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ot">putSuccess ::</span> <span class="dt">ResultVar</span> a <span class="ot">-&gt;</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> ()</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ot">putFailure ::</span> (<span class="dt">Exception</span> e) <span class="ot">=&gt;</span> <span class="dt">ResultVar</span> a <span class="ot">-&gt;</span> e <span class="ot">-&gt;</span> <span class="dt">IO</span> ()</span></code></pre></div>
+<p>Because <code>fetch</code> is passed a <em>list</em> of <code>BlockedFetch</code>, it can collect
+together requests and satisfy them using a single query to the
+database, or perform them concurrently, or use whatever methods are
+available for performing multiple requests simultaneously.</p>
 <p>The <code>fetch</code> method returns <code>PerformFetch</code>, which is defined like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">PerformFetch</span>
-  <span class="fu">=</span> <span class="dt">SyncFetch</span>  (<span class="dt">IO</span> ())
-  <span class="fu">|</span> <span class="dt">AsyncFetch</span> (<span class="dt">IO</span> () <span class="ot">-&gt;</span> <span class="dt">IO</span> ())</code></pre></div>
-<p>For our purposes here, we’ll only use <code>SyncFetch</code>, which should contain an <code>IO</code> action whose job it is to fill in all the results in the <code>BlockedFetch</code>es before it returns. The alternative <code>AsyncFetch</code> can be used to overlap requests from multiple data sources.</p>
-<p>Lastly, let’s talk about state. Most data sources will need some state; in the case of our blog database we need to keep track of the handle to the database so that we don’t have to open a fresh one each time we make some queries. In Haxl, data source state is represented using an associated data type called <code>State</code>, which is defined by the <code>StateKey</code> class:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">class</span> <span class="dt">Typeable</span> f <span class="ot">=&gt;</span> <span class="dt">StateKey</span> (<span class="ot">f ::</span> <span class="fu">*</span> <span class="ot">-&gt;</span> <span class="fu">*</span>) <span class="kw">where</span>
-  <span class="kw">data</span> <span class="dt">State</span> f</code></pre></div>
-<p>So every data source with request type <code>req</code> defines a state of type <code>State req</code>, which can of course be empty if the data source doesn’t need any state. Our blog data source defines it like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">instance</span> <span class="dt">StateKey</span> <span class="dt">BlogRequest</span> <span class="kw">where</span>
-  <span class="kw">data</span> <span class="dt">State</span> <span class="dt">BlogRequest</span> <span class="fu">=</span> <span class="dt">BlogDataState</span> <span class="dt">SQLiteHandle</span></code></pre></div>
-<p>The <code>State req</code> for a data source is passed to <code>fetch</code> each time it is called.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">data</span> <span class="dt">PerformFetch</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="ot">=</span> <span class="dt">SyncFetch</span>  (<span class="dt">IO</span> ())</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span> <span class="dt">AsyncFetch</span> (<span class="dt">IO</span> () <span class="ot">-&gt;</span> <span class="dt">IO</span> ())</span></code></pre></div>
+<p>For our purposes here, we’ll only use <code>SyncFetch</code>, which should contain an
+<code>IO</code> action whose job it is to fill in all the results in the
+<code>BlockedFetch</code>es before it returns. The alternative <code>AsyncFetch</code> can
+be used to overlap requests from multiple data sources.</p>
+<p>Lastly, let’s talk about state. Most data sources will need some
+state; in the case of our blog database we need to keep track of the
+handle to the database so that we don’t have to open a fresh one each
+time we make some queries. In Haxl, data source state is represented
+using an associated data type called <code>State</code>, which is defined by the
+<code>StateKey</code> class:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="dt">Typeable</span> f <span class="ot">=&gt;</span> <span class="dt">StateKey</span> (<span class="ot">f ::</span> <span class="op">*</span> <span class="ot">-&gt;</span> <span class="op">*</span>) <span class="kw">where</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">data</span> <span class="dt">State</span> f</span></code></pre></div>
+<p>So every data source with request type <code>req</code> defines a state of type
+<code>State req</code>, which can of course be empty if the data source doesn’t
+need any state. Our blog data source defines it like this:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> <span class="dt">StateKey</span> <span class="dt">BlogRequest</span> <span class="kw">where</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">data</span> <span class="dt">State</span> <span class="dt">BlogRequest</span> <span class="ot">=</span> <span class="dt">BlogDataState</span> <span class="dt">SQLiteHandle</span></span></code></pre></div>
+<p>The <code>State req</code> for a data source is passed to <code>fetch</code> each time it is
+called.</p>
 <p>The full implementation of our example data source is in <a
 href="https://github.com/simonmar/haskell-eXchange-2015/blob/3ae0e34a051201eb77721bee2e940ec1f764a0df/BlogDataSource.hs">BlogDataSource.hs</a>.</p>
 <h2 id="how-do-we-run-some-haxl">How do we run some Haxl?</h2>
 <p>There’s a <code>runHaxl</code> function:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">runHaxl ::</span> <span class="dt">Env</span> u <span class="ot">-&gt;</span> <span class="dt">GenHaxl</span> u a <span class="ot">-&gt;</span> <span class="dt">IO</span> a</code></pre></div>
-<p>Which needs something of type <code>Env u</code>. This is the “environment” that a Haxl computation runs in, and contains various things needed by the framework. It also contains the data source state, and to build an <code>Env</code> we need to supply the initial state. Here’s how to get an <code>Env</code>:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">initEnv ::</span> <span class="dt">StateStore</span> <span class="ot">-&gt;</span> u <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Env</span> u)</code></pre></div>
-<p>The <code>StateStore</code> contains the states for all the data sources we’re using. It is constructed with these two functions:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">stateEmpty ::</span> <span class="dt">StateStore</span>
-<span class="ot">stateSet ::</span> <span class="dt">StateKey</span> f <span class="ot">=&gt;</span> <span class="dt">State</span> f <span class="ot">-&gt;</span> <span class="dt">StateStore</span> <span class="ot">-&gt;</span> <span class="dt">StateStore</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="ot">runHaxl ::</span> <span class="dt">Env</span> u <span class="ot">-&gt;</span> <span class="dt">GenHaxl</span> u a <span class="ot">-&gt;</span> <span class="dt">IO</span> a</span></code></pre></div>
+<p>Which needs something of type <code>Env u</code>. This is the “environment” that
+a Haxl computation runs in, and contains various things needed by the
+framework. It also contains the data source state, and to build an
+<code>Env</code> we need to supply the initial state. Here’s how to get an <code>Env</code>:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="ot">initEnv ::</span> <span class="dt">StateStore</span> <span class="ot">-&gt;</span> u <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Env</span> u)</span></code></pre></div>
+<p>The <code>StateStore</code> contains the states for all the data sources we’re
+using. It is constructed with these two functions:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="ot">stateEmpty ::</span> <span class="dt">StateStore</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="ot">stateSet ::</span> <span class="dt">StateKey</span> f <span class="ot">=&gt;</span> <span class="dt">State</span> f <span class="ot">-&gt;</span> <span class="dt">StateStore</span> <span class="ot">-&gt;</span> <span class="dt">StateStore</span></span></code></pre></div>
 <p>To see how to put these together, take a look at <a
 href="https://github.com/simonmar/haskell-eXchange-2015/blob/3ae0e34a051201eb77721bee2e940ec1f764a0df/HaxlBlog.hs">HaxlBlog.hs</a>.</p>
 <h2 id="trying-it-out">Trying it out</h2>
-<p>We saw a small example of our Haxl data source working earlier, but just to round off this first part of the series and whet your appetite for the next part, here are a couple more examples.</p>
+<p>We saw a small example of our Haxl data source working earlier, but
+just to round off this first part of the series and whet your appetite
+for the next part, here are a couple more examples.</p>
 <p>Haxl batches things together when we use the <code>Applicative</code> operators:</p>
 <pre><code>*HaxlBlog&gt; run $ (,) &lt;$&gt; getPostContent 1 &lt;*&gt; getPostContent 2
 select postid,content from postcontent where postid in (2,1)
@@ -846,7 +1401,9 @@ select postid,content from postcontent where postid in (2,1)
 <pre><code>*HaxlBlog&gt; run $ (,) &lt;$&gt; mapM getPostContent [1..3] &lt;*&gt; mapM getPostContent [4..6]
 select postid,content from postcontent where postid in (6,5,4,3,2,1)
 ([&quot;example content 1&quot;,&quot;example content 2&quot;,&quot;example content 3&quot;],[&quot;example content 4&quot;,&quot;example content 5&quot;,&quot;example content 6&quot;])</code></pre>
-<p>In Part 2 we’ll talk more about batching, and introduce the upcoming <code>ApplicativeDo</code> extension which will allow Haxl to automatically parallelize sequential-looking <code>do</code>-expressions.</p>
+<p>In Part 2 we’ll talk more about batching, and introduce the upcoming
+<code>ApplicativeDo</code> extension which will allow Haxl to automatically
+parallelize sequential-looking <code>do</code>-expressions.</p>
 </div>
 ]]></summary>
 </entry>
@@ -861,93 +1418,234 @@ select postid,content from postcontent where postid in (6,5,4,3,2,1)
   <span class="post-date">July 28, 2015</span>
   <h2 id="background">Background</h2>
 <p>I work with a team at Facebook on <a
-href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">Sigma</a>, which is part of the anti-spam infrastructure. Sigma runs Haskell code, using the <a
+href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">Sigma</a>, which is part of the anti-spam infrastructure. Sigma
+runs Haskell code, using the <a
 href="https://github.com/facebook/Haxl">Haxl</a> framework.</p>
-<p>I plan to use this blog to post about things that our team is doing that relate to Haskell and might be of interest to the wider Haskell community. When I say “we” in what follows, I’m referring to the team that works on Haxl and Sigma at Facebook.</p>
+<p>I plan to use this blog to post about things that our team is doing
+that relate to Haskell and might be of interest to the wider Haskell
+community. When I say “we” in what follows, I’m referring to the team
+that works on Haxl and Sigma at Facebook.</p>
 <h2 id="profiling-the-gc">Profiling the GC</h2>
-<p>Last week I decided to dig into how the Haskell GC was performing in Sigma. Up until now we’ve been mostly focusing on performance of the Haskell code, because reducing allocation pressure by optimising the Haskell code has direct benefits in reducing GC overhead. We had made a couple of improvements to the GC itself (<a
+<p>Last week I decided to dig into how the Haskell GC was performing in
+Sigma. Up until now we’ve been mostly focusing on performance of the
+Haskell code, because reducing allocation pressure by optimising the
+Haskell code has direct benefits in reducing GC overhead. We had made
+a couple of improvements to the GC itself (<a
 href="https://phabricator.haskell.org/D318">here</a> and <a
-href="https://phabricator.haskell.org/rGHC452eb80f15fce8665df52bc9facebfafb5b6267b">here</a>) earlier, but until now we hadn’t done a thorough investigation into how the GC was behaving.</p>
-<p>It turns out there was some low-hanging fruit, and I managed to <strong>cut the GC overhead roughly in half</strong> for our production workload with a handful of fixes (by me and others). This is performance for free—the Haskell code remains the same, but running it consumes less time and electricity.</p>
+href="https://phabricator.haskell.org/rGHC452eb80f15fce8665df52bc9facebfafb5b6267b">here</a>)
+earlier, but until now we hadn’t done a thorough investigation into
+how the GC was behaving.</p>
+<p>It turns out there was some low-hanging fruit, and I managed to <strong>cut
+the GC overhead roughly in half</strong> for our production workload with a
+handful of fixes (by me and others). This is performance for
+free—the Haskell code remains the same, but running it consumes less
+time and electricity.</p>
 <h2 id="goals">Goals</h2>
 <p>A couple of things prompted this investigation:</p>
-<ol style="list-style-type: decimal">
-<li><p>Sigma runs on different types of machines, with different numbers of cores. On machines with more cores, we were seeing longer GC pause times.</p></li>
-<li><p>A no-brainer way to reduce GC overhead is to give the GC more memory. Every time the GC runs, it has to traverse all the live data, so it follows that running the GC half as often should yield half the overhead. Running the GC half as often requires twice as much memory. Unfortunately I found that while this works to some extent, using more memory unexpectedly also resulted in longer pause times.</p></li>
+<ol type="1">
+<li><p>Sigma runs on different types of machines, with different numbers of
+cores. On machines with more cores, we were seeing longer GC pause
+times.</p></li>
+<li><p>A no-brainer way to reduce GC overhead is to give the GC more
+memory. Every time the GC runs, it has to traverse all the live
+data, so it follows that running the GC half as often should yield
+half the overhead. Running the GC half as often requires twice as
+much memory. Unfortunately I found that while this works to some
+extent, using more memory unexpectedly also resulted in longer pause
+times.</p></li>
 </ol>
-<p>Longer pause times are a problem when you care about latency, so this artificially constrains the amount of memory Sigma can use while staying within its latency requirements.</p>
-<p>There are a couple of solutions to this problem I’m going to ignore for now:</p>
-<ol start="3" style="list-style-type: decimal">
-<li><p>GC architecture that is designed to reduce pause times, such as concurrent or incremental GC. Indeed I worked on <a
-  href="http://community.haskell.org/~simonmar/papers/local-gc.pdf">a partially-concurrent GC</a> for GHC, but it currently isn’t part of GHC for various reasons (too complicated, moves overheads to other places, etc.). In the future I’d like to return to this, but for now let’s ignore alternative GC architecture and see what can be done with the existing stop-the-world parallel GC.</p></li>
-<li><p>There are load-balancing tricks that could be used to avoid sending requests to machines about to GC. This could be important if your latency requirements are tighter than typical GC pause times would allow, but at least in our case there is enough headroom that we don’t need to worry about this. So again, let’s ignore load-balancing tricks and just worry about how to reduce pause times.</p></li>
+<p>Longer pause times are a problem when you care about latency, so this
+artificially constrains the amount of memory Sigma can use while staying
+within its latency requirements.</p>
+<p>There are a couple of solutions to this problem I’m going to ignore
+for now:</p>
+<ol start="3" type="1">
+<li><p>GC architecture that is designed to reduce pause times, such as
+concurrent or incremental GC. Indeed I worked on <a
+  href="http://community.haskell.org/~simonmar/papers/local-gc.pdf">a
+partially-concurrent GC</a> for GHC, but it currently isn’t part of
+GHC for various reasons (too complicated, moves overheads to other
+places, etc.). In the future I’d like to return to this, but for
+now let’s ignore alternative GC architecture and see what can be done
+with the existing stop-the-world parallel GC.</p></li>
+<li><p>There are load-balancing tricks that could be used to avoid sending
+requests to machines about to GC. This could be important if your
+latency requirements are tighter than typical GC pause times would
+allow, but at least in our case there is enough headroom that we
+don’t need to worry about this. So again, let’s ignore
+load-balancing tricks and just worry about how to reduce pause
+times.</p></li>
 </ol>
 <h2 id="start-with-a-threadscope-profile">Start with a ThreadScope profile</h2>
 <p>The first thing I did was to break out <a
-href="https://wiki.haskell.org/ThreadScope">ThreadScope</a> and visualize a Sigma process running flat out (note that running flat out is rare in practice, because traffic isn’t constant, and it’s important to have spare capacity just in case).</p>
-<p>ThreadScope immediately threw up a few interesting things to investigate. First, it looks like some of the cores are only partially active:</p>
-<div class="figure">
-<img src="/images/threadscope1.png" />
-
-</div>
-<p>This is only showing activity in Haskell, not in C++, so it doesn’t necessarily mean the machine wasn’t busy during those times. However, it could also be that GHC’s scheduler isn’t doing a great job of balancing the load. That definitely deserves investigation, but I’m primarily interested in what the GC is doing, so let’s come back to that later (in a future post, perhaps).</p>
+href="https://wiki.haskell.org/ThreadScope">ThreadScope</a> and
+visualize a Sigma process running flat out (note that running flat out
+is rare in practice, because traffic isn’t constant, and it’s
+important to have spare capacity just in case).</p>
+<p>ThreadScope immediately threw up a few interesting things to
+investigate. First, it looks like some of the cores are only partially active:</p>
+<p><img src="/images/threadscope1.png" /></p>
+<p>This is only showing activity in Haskell, not in C++, so it doesn’t
+necessarily mean the machine wasn’t busy during those times. However,
+it could also be that GHC’s scheduler isn’t doing a great job of
+balancing the load. That definitely deserves investigation, but I’m
+primarily interested in what the GC is doing, so let’s come back to
+that later (in a future post, perhaps).</p>
 <h2 id="right-off-the-bat-a-bug-in-gc-synchronisation">Right off the bat: a bug in GC synchronisation</h2>
 <p>Let’s look at a typical GC:</p>
-<div class="figure">
-<img src="/images/threadscope2.png" />
-
-</div>
-<p>When a GC is required, all the cores stop running Haskell code and report for GC duties. When they stop, they have to synchronise. In the above profile a few cores appear to “stutter” a bit before stopping. This turned out to be a <a
-href="https://phabricator.haskell.org/rGHC75fd5dc204fb6bb9014f6bba4d680facbc952faf">bug in the scheduler</a> that was a bit tricky to track down, but wasn’t hard to fix. It won’t affect most people using GHC because it only happens when using the “nursery chunks” feature we added earlier.</p>
+<p><img src="/images/threadscope2.png" /></p>
+<p>When a GC is required, all the cores stop running Haskell code and
+report for GC duties. When they stop, they have to synchronise. In
+the above profile a few cores appear to “stutter” a
+bit before stopping. This turned out to be a <a
+href="https://phabricator.haskell.org/rGHC75fd5dc204fb6bb9014f6bba4d680facbc952faf">bug
+in the scheduler</a> that was a bit tricky to track down, but wasn’t
+hard to fix. It won’t affect most people using GHC because it only
+happens when using the “nursery chunks” feature we added earlier.</p>
 <h2 id="gc-phases">GC phases</h2>
-<p>There are a few phases in a GC. ThreadScope doesn’t show them all visually, but they can be identified from the raw event log data:</p>
-<ol style="list-style-type: decimal">
-<li><p>Synchronisation: as described above. We know from monitoring that this typically takes about 1ms, so compared to our overall GC pause time it’s not significant. Incidentally, to get the sync time down to a sensible value we had to do a lot of work to identify FFI calls that should be marked “safe” rather than “unsafe”.</p></li>
+<p>There are a few phases in a GC. ThreadScope doesn’t show them all
+visually, but they can be identified from the raw event log data:</p>
+<ol type="1">
+<li><p>Synchronisation: as described above. We know from monitoring that
+this typically takes about 1ms, so compared to our overall GC pause
+time it’s not significant. Incidentally, to get the sync time down to
+a sensible value we had to do a lot of work to identify FFI calls that
+should be marked “safe” rather than “unsafe”.</p></li>
 <li><p>Init: one thread sets up the GC data structures ready for GC</p></li>
 <li><p>Trace: all the threads trace the live data and copy it</p></li>
-<li><p>Cleanup: one thread tidies up the GC data structures and releases memory.</p></li>
+<li><p>Cleanup: one thread tidies up the GC data structures and releases
+memory.</p></li>
 </ol>
-<p>Trace is the biggest phase, as expected (I’ll come back to that later). But Init and Cleanup are both single-threaded phases, so it’s especially important to keep these phases short. Looking at the ThreadScope profile, it looks like the Init phase is about 5ms, while Cleanup is regularly 20ms or greater - now <em>that</em> is surprising, I’d really like to know where that 20ms is going.</p>
-<p>Next I instrumented the Cleanup phase to narrow down where the time is going. I found that:</p>
-<ol style="list-style-type: decimal">
-<li><p>Between 1-10ms is spent releasing memory for large objects. This is surprising, and goes some way to explaining why larger heap sizes result in longer pause times. Needs more investigation (in a later post).</p></li>
-<li><p>20ms is spent in <code>zero_static_object_list()</code>, I’ll come back to this later.</p></li>
-<li><p>5ms is spent finalizing objects. Wow! I didn’t realise there was anything that needed finalizing at all.</p></li>
+<p>Trace is the biggest phase, as expected (I’ll come back to that
+later). But Init and Cleanup are both single-threaded phases, so it’s
+especially important to keep these phases short. Looking at the
+ThreadScope profile, it looks like the Init phase is about 5ms, while
+Cleanup is regularly 20ms or greater - now <em>that</em> is surprising, I’d
+really like to know where that 20ms is going.</p>
+<p>Next I instrumented the Cleanup phase to narrow down where the time is
+going. I found that:</p>
+<ol type="1">
+<li><p>Between 1-10ms is spent releasing memory for large objects. This
+is surprising, and goes some way to explaining why larger heap sizes
+result in longer pause times. Needs more investigation (in a later
+post).</p></li>
+<li><p>20ms is spent in <code>zero_static_object_list()</code>, I’ll come back to
+this later.</p></li>
+<li><p>5ms is spent finalizing objects. Wow! I didn’t realise there was
+anything that needed finalizing at all.</p></li>
 </ol>
 <h2 id="saving-5ms-per-gc-by-not-using-foreignptr">Saving 5ms per GC by not using <code>ForeignPtr</code></h2>
-<p>With a bit more instrumentation (which is a fancy name for <code>printf</code>), I discovered that each GC was finalizing around 20,000 weak pointers. A weak pointer is created by <code>newForeignPtr</code> in Haskell - it’s a pointer to a data structure outside the Haskell heap that needs to be finalized when it becomes garbage. These things are quite heavyweight, due to the extra work the GC needs to do to track them.</p>
-<p>It took me a little while to find exactly what was creating these <code>ForeignPtr</code>s, but eventually I tracked it down to the <code>regex-pcre</code> package. Some of our Haskell code uses regular expressions, and compiling a regex using <code>regex-pcre</code> creates a <code>ForeignPtr</code>.</p>
-<p>This is perfectly reasonable when the library doesn’t know the lifetime of the regex, and it’s typically a good idea to compile a regex once and use it many times. But the places that were using regexes, the regex was compiled once and then discarded.</p>
-<p>It was simple enough to change the <code>regex-pcre</code> to expose a <code>withRegex</code> function that used scoped allocation rather than <code>ForeignPtr</code>, and then use this. This removed all the <code>ForeignPtr</code>s and saved 5ms per GC.</p>
+<p>With a bit more instrumentation (which is a fancy name for <code>printf</code>),
+I discovered that each GC was finalizing around 20,000 weak pointers.
+A weak pointer is created by <code>newForeignPtr</code> in Haskell - it’s a
+pointer to a data structure outside the Haskell heap that needs to be
+finalized when it becomes garbage. These things are quite
+heavyweight, due to the extra work the GC needs to do to track them.</p>
+<p>It took me a little while to find exactly what was creating these
+<code>ForeignPtr</code>s, but eventually I tracked it down to the <code>regex-pcre</code>
+package. Some of our Haskell code uses regular expressions, and
+compiling a regex using <code>regex-pcre</code> creates a <code>ForeignPtr</code>.</p>
+<p>This is perfectly reasonable when the library doesn’t know the
+lifetime of the regex, and it’s typically a good idea to compile a
+regex once and use it many times. But the places that were using
+regexes, the regex was compiled once and then discarded.</p>
+<p>It was simple enough to change the <code>regex-pcre</code> to expose a
+<code>withRegex</code> function that used scoped allocation rather than
+<code>ForeignPtr</code>, and then use this. This removed all the <code>ForeignPtr</code>s
+and saved 5ms per GC.</p>
 <h2 id="saving-20ms-per-gc-by-optimising-static-object-handling">Saving 20ms per GC by optimising static object handling</h2>
-<p>The next thing to look at was <code>zero_static_object_list()</code>. The story behind this is a bit involved. In Haskell we can have top-level lazy definitions; when you write something like this</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">x ::</span> <span class="dt">HashMap</span> <span class="dt">Text</span> <span class="dt">Int</span>
-x <span class="fu">=</span> HashMap.fromList [ (<span class="st">&quot;a&quot;</span>,<span class="dv">1</span>), (<span class="st">&quot;b&quot;</span>,<span class="dv">2</span>), <span class="fu">...</span> ]</code></pre></div>
-<p><code>x</code> is a top-level definition that is computed when it is first used. This is called a CAF (Constant Applicative Form).</p>
-<p>Now, the garbage collector needs to know about all the CAFs, because they are roots into the heap. However, it is important to garbage-collect a CAF that is no longer needed, because it might be holding onto a lot of data in the heap. But to tell when <code>x</code> is no longer needed, the GC needs to follow references from <em>code</em>, not just <em>data</em>. So that’s what the GC does - there’s an abstraction of the references from code, called an SRT (Static Reference Table), and the GC traces all the CAFs reachable from the SRTs during every major GC.</p>
-<p>During this process, the GC links all the static objects, like <code>x</code>, together on a list, so it can tell which ones it has seen so far. The list is chained through the objects themselves - each one has a link field that starts NULL and points to the next object on the list when it has been visited. After GC, the fields must be reset to NULL again, which is what <code>zero_static_object_list()</code> is doing. In Sigma there is a lot of code, so this was taking 20ms.</p>
-<p>The trick to avoid this is instead of using NULL to indicate an object that the GC hasn’t seen yet, use a flag that flips between two states. I use the values 1 and 2, and store these in the low 2 bits of the pointer in the object’s link field. Each GC flips the flag value to the other state and stores it in each object it visits. If the GC meets an object with the other flag value, we know we haven’t seen it during this GC cycle. The scheme is made a little more complicated by two other things: there might be objects that appear that we have never seen before (due to runtime linking), and there might be objects that are unconditionally alive for other reasons (which is what the values 0 and 3 are reserved for).</p>
-<p>Here’s the <a href="https://phabricator.haskell.org/D1076">patch</a>. At the time of writing, I had to back it out because it introduced a performance regression in one benchmark, and some <a
-href="https://ghc.haskell.org/trac/ghc/ticket/10685">test failures</a> in a certain build configuration. I’ll investigate those and get the patch back in as soon as possible.</p>
+<p>The next thing to look at was <code>zero_static_object_list()</code>. The story
+behind this is a bit involved. In Haskell we can have top-level lazy
+definitions; when you write something like this</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ot">x ::</span> <span class="dt">HashMap</span> <span class="dt">Text</span> <span class="dt">Int</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>x <span class="ot">=</span> HashMap.fromList [ (<span class="st">&quot;a&quot;</span>,<span class="dv">1</span>), (<span class="st">&quot;b&quot;</span>,<span class="dv">2</span>), <span class="op">...</span> ]</span></code></pre></div>
+<p><code>x</code> is a top-level definition that is computed when it is first used.
+This is called a CAF (Constant Applicative Form).</p>
+<p>Now, the garbage collector needs to know about all the CAFs, because
+they are roots into the heap. However, it is important to
+garbage-collect a CAF that is no longer needed, because it might be
+holding onto a lot of data in the heap. But to tell when <code>x</code> is no
+longer needed, the GC needs to follow references from <em>code</em>, not just
+<em>data</em>. So that’s what the GC does - there’s an abstraction of the
+references from code, called an SRT (Static Reference Table), and the
+GC traces all the CAFs reachable from the SRTs during every major GC.</p>
+<p>During this process, the GC links all the static objects, like <code>x</code>,
+together on a list, so it can tell which ones it has seen so far. The
+list is chained through the objects themselves - each one has a link
+field that starts NULL and points to the next object on the list when
+it has been visited. After GC, the fields must be reset to NULL
+again, which is what <code>zero_static_object_list()</code> is doing. In Sigma
+there is a lot of code, so this was taking 20ms.</p>
+<p>The trick to avoid this is instead of using NULL to indicate an object
+that the GC hasn’t seen yet, use a flag that flips between two states.
+I use the values 1 and 2, and store these in the low 2 bits of the
+pointer in the object’s link field. Each GC flips the flag value to
+the other state and stores it in each object it visits. If the GC
+meets an object with the other flag value, we know we haven’t seen it
+during this GC cycle. The scheme is made a little more complicated by
+two other things: there might be objects that appear that we have never
+seen before (due to runtime linking), and there might be objects that
+are unconditionally alive for other reasons (which is what the values
+0 and 3 are reserved for).</p>
+<p>Here’s the <a href="https://phabricator.haskell.org/D1076">patch</a>.
+At the time of writing, I had to back it out because it
+introduced a performance regression in one benchmark, and some <a
+href="https://ghc.haskell.org/trac/ghc/ticket/10685">test failures</a>
+in a certain build configuration. I’ll investigate those and get the
+patch back in as soon as possible.</p>
 <h2 id="avoiding-contention-by-optimising-heap_alloced">Avoiding contention by optimising <code>HEAP_ALLOCED()</code></h2>
-<p>ThreadScope doesn’t give an indication of where in the code the time is being spent, so I also took a look at the output from the Linux <code>perf</code> tool for our running process.</p>
-<p>It showed that the process was spending a lot of time in <code>evacuate</code>, which is not surprising - that’s the routine in the GC that copies objects. However, when I drilled down into <code>evacuate</code> in <code>perf report</code> and annotated the assembly, this is what I saw:</p>
-<div class="figure">
-<img src="/images/perf.png" />
-
-</div>
-<p>The majority of the time is spent in a spinlock. Furthermore, it tells which one: this is part of the implementation of a function called <code>HEAP_ALLOCED()</code>.</p>
-<p>A bit of background is in order. GHC allocates memory from the operating system in units of aligned megabytes. So it owns a collection of megabytes that might be anywhere in the address space. For every pointer it sees, the GC asks the question “is this a pointer into the heap?”, and the memory manager should return true for any of the memory that GHC has allocated, and false otherwise. This is the job of the <code>HEAP_ALLOCED()</code> macro.</p>
-<p>On a 32-bit machine, answering the question is easy: a megabyte is 20 bits, so we only need a 12-bit lookup table, and even using a full byte for each entry, that’s just 4KB.</p>
-<p>On a 64-bit machine, it’s much harder. Even taking advantage of the fact that only 48 bits are available address space on x86_64 architecture machines, that still leaves 28 bits, which is a 256MB table (32MB using bits instead of bytes). This is not likely to be an acceptable memory overhead.</p>
-<p>So the existing implementation of <code>HEAP_ALLOCED()</code> for 64-bit machines <a
-href="https://phabricator.haskell.org/diffusion/GHC/browse/master/rts/sm/HeapAlloc.h;6e618d77d64255c32bef543a3f9635abce24a66d$71-113">used a cache</a>. The fallback path for a cache miss needs to consult the actual memory mapping, which requires a lock.</p>
-<p>In our application, which has quite large memory requirements and uses a lot of cores, there were a lot of cache misses, and contention for this lock was extremely high.</p>
-<p>Fortunately, a solution to this problem had been sitting around for a while, in the form of the <a
-href="https://phabricator.haskell.org/D524">two-step allocator</a> (the patch is by Giovanni Campagna, with a few updates by me). Instead of allocating memory randomly around the address space, the runtime reserves a large chunk of address space up front, and then allocates memory within that chunk. This works on certain OSs - Linux and OS X, but not Windows, <a href="https://phabricator.haskell.org/D524#29391">it turns out</a>.</p>
-<p>Bringing in this patch made a huge difference to GC performance, although it’s difficult to get an accurate measure of how much, because the amount of contention for the lock in the old code depended on the random location of memory in the address space. In total the patches mentioned so far approximately halved GC overhead for our workload.</p>
+<p>ThreadScope doesn’t give an indication of where in the code the time
+is being spent, so I also took a look at the output from the Linux
+<code>perf</code> tool for our running process.</p>
+<p>It showed that the process was spending a lot of time in <code>evacuate</code>,
+which is not surprising - that’s the routine in the GC that copies
+objects. However, when I drilled down into <code>evacuate</code> in <code>perf report</code> and annotated the assembly, this is what I saw:</p>
+<p><img src="/images/perf.png" /></p>
+<p>The majority of the time is spent in a spinlock. Furthermore, it
+tells which one: this is part of the implementation of a function
+called <code>HEAP_ALLOCED()</code>.</p>
+<p>A bit of background is in order. GHC allocates memory from the
+operating system in units of aligned megabytes. So it owns a
+collection of megabytes that might be anywhere in the address space.
+For every pointer it sees, the GC asks the question “is this a pointer
+into the heap?”, and the memory manager should return true for any of
+the memory that GHC has allocated, and false otherwise. This is the
+job of the <code>HEAP_ALLOCED()</code> macro.</p>
+<p>On a 32-bit machine, answering the question is easy: a megabyte is 20
+bits, so we only need a 12-bit lookup table, and even using a full
+byte for each entry, that’s just 4KB.</p>
+<p>On a 64-bit machine, it’s much harder. Even taking advantage of
+the fact that only 48 bits are available address space on x86_64
+architecture machines, that still leaves 28 bits, which is a 256MB
+table (32MB using bits instead of bytes). This is not likely to
+be an acceptable memory overhead.</p>
+<p>So the existing implementation of <code>HEAP_ALLOCED()</code> for 64-bit machines
+<a
+href="https://phabricator.haskell.org/diffusion/GHC/browse/master/rts/sm/HeapAlloc.h;6e618d77d64255c32bef543a3f9635abce24a66d$71-113">used
+a cache</a>. The fallback path for a cache miss needs to consult the actual memory mapping, which requires a lock.</p>
+<p>In our application, which has quite large memory requirements and uses
+a lot of cores, there were a lot of cache misses, and contention for
+this lock was extremely high.</p>
+<p>Fortunately, a solution to this problem had been sitting around for a
+while, in the form of the <a
+href="https://phabricator.haskell.org/D524">two-step allocator</a>
+(the patch is by Giovanni Campagna, with a few updates by me).
+Instead of allocating memory randomly around the address space, the runtime
+reserves a large chunk of address space up front, and then allocates
+memory within that chunk. This works on certain OSs - Linux and OS X, but
+not Windows, <a href="https://phabricator.haskell.org/D524#29391">it
+turns out</a>.</p>
+<p>Bringing in this patch made a huge difference to GC performance,
+although it’s difficult to get an accurate measure of how much,
+because the amount of contention for the lock in the old code depended
+on the random location of memory in the address space. In total the
+patches mentioned so far approximately halved GC overhead for our
+workload.</p>
 <h2 id="loose-ends">Loose ends</h2>
-<p>There were a couple of loose ends to chase up from the ThreadScope profile: possible scheduler suboptimality, and time spent freeing large objects. I plan to look into those later, there may well be further improvements to be had. Until next time!</p>
+<p>There were a couple of loose ends to chase up from the ThreadScope
+profile: possible scheduler suboptimality, and time spent freeing
+large objects. I plan to look into those later, there may well be
+further improvements to be had. Until next time!</p>
 </div>
 ]]></summary>
 </entry>

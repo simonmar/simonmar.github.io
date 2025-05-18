@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -111,25 +111,48 @@
   <h1 class="post-title">Stack traces in GHCi, coming in GHC 8.0.1</h1>
   <span class="post-date">February 12, 2016</span>
   <p><strong>tl;dr</strong></p>
-<p>In the upcoming GHC 8.0.1 release, if you start GHCi with <code>ghci -fexternal-interpreter -prof</code> (any packages you use must be built for profiling), then you get access to detailed stack traces for all the code you load into GHCi. Stack traces can be accessed via <code>assert</code>, <code>error</code>, <a href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/Debug-Trace.html#v:traceStack">Debug.Trace.traceStack</a>, and the API in <a href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/GHC-Stack.html">GHC.Stack</a>.</p>
+<p>In the upcoming GHC 8.0.1 release, if you start GHCi with <code>ghci -fexternal-interpreter -prof</code> (any packages you use must be built for
+profiling), then you get access to detailed stack traces for all the
+code you load into GHCi. Stack traces can be accessed via <code>assert</code>,
+<code>error</code>, <a href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/Debug-Trace.html#v:traceStack">Debug.Trace.traceStack</a>, and the API in <a href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/GHC-Stack.html">GHC.Stack</a>.</p>
 <h2 id="background">Background</h2>
-<p>Haxl users at Facebook do a lot of development and testing inside GHCi. In fact, we’ve built a customized version of GHCi that runs code in our <code>Haxl</code> monad by default instead of the <code>IO</code> monad, and has a handful of extra commands to support common workflows needed by our developers.</p>
-<p>Some of our codebase is pre-compiled, but the code being actively worked on is just loaded on the fly into GHCi during development and run with the interpreter. This works surprisingly well even for large codebases like ours, especially if you enable parallel compilation and use a bigger heap (e.g. <code>ghci -j8 +RTS -A128m</code>). This is a pretty smooth setup: right inside GHCi we can test the production code against real data, and interact with all of the services that our production systems talk to, while having a nice interactive edit/compile/test cycle.</p>
-<p>However, one thing is missed by many developers, especially those coming from other languages: easy access to a <strong>stack trace</strong> when debugging. So, towards the end of last year, I set about finding a workable solution that we could deploy to our users without impacting their workflows.</p>
+<p>Haxl users at Facebook do a lot of development and testing inside
+GHCi. In fact, we’ve built a customized version of GHCi that runs
+code in our <code>Haxl</code> monad by default instead of the <code>IO</code> monad, and has
+a handful of extra commands to support common workflows needed by our
+developers.</p>
+<p>Some of our codebase is pre-compiled, but the code being actively
+worked on is just loaded on the fly into GHCi during development and
+run with the interpreter. This works surprisingly well even for large
+codebases like ours, especially if you enable parallel compilation and
+use a bigger heap (e.g. <code>ghci -j8 +RTS -A128m</code>). This is a pretty
+smooth setup: right inside GHCi we can test the production code against
+real data, and interact with all of the services that our production
+systems talk to, while having a nice interactive edit/compile/test
+cycle.</p>
+<p>However, one thing is missed by many developers, especially those
+coming from other languages: easy access to a <strong>stack trace</strong> when
+debugging. So, towards the end of last year, I set about finding a
+workable solution that we could deploy to our users without impacting
+their workflows.</p>
 <h2 id="show-me-a-stack-trace">Show me a stack trace!</h2>
 <p>To cut to the chase, in GHC 8.0.1 you can fire up ghci like this:</p>
 <pre><code>$ ghci -fexternal-interpreter -prof</code></pre>
-<p>and you have stack traces on, by default, for all the code you load into ghci. Let’s try an example.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import </span><span class="dt">Control.Exception</span>
-
-myTail xs <span class="fu">=</span> assert (not (null xs)) <span class="fu">$</span> tail xs
-
-<span class="ot">myMap ::</span> (a <span class="ot">-&gt;</span> b) <span class="ot">-&gt;</span> [a] <span class="ot">-&gt;</span> [b]
-myMap f [] <span class="fu">=</span> []
-myMap f (x<span class="fu">:</span>xs) <span class="fu">=</span> f x <span class="fu">:</span> myMap f xs
-
-main <span class="fu">=</span> print (myMap myTail [[<span class="dv">3</span>],[]])</code></pre></div>
-<p>We have a map-alike function called <code>myMap</code>, and a tail-alike function called <code>myTail</code>. We want to find out if <code>myTail</code> is called with an empty list, so we added an assert. Ok, so it’s a contrived example, but let’s see what happens:</p>
+<p>and you have stack traces on, by default, for all the code you load
+into ghci. Let’s try an example.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="dt">Control.Exception</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>myTail xs <span class="ot">=</span> assert (<span class="fu">not</span> (<span class="fu">null</span> xs)) <span class="op">$</span> <span class="fu">tail</span> xs</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ot">myMap ::</span> (a <span class="ot">-&gt;</span> b) <span class="ot">-&gt;</span> [a] <span class="ot">-&gt;</span> [b]</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>myMap f [] <span class="ot">=</span> []</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>myMap f (x<span class="op">:</span>xs) <span class="ot">=</span> f x <span class="op">:</span> myMap f xs</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>main <span class="ot">=</span> <span class="fu">print</span> (myMap myTail [[<span class="dv">3</span>],[]])</span></code></pre></div>
+<p>We have a map-alike function called <code>myMap</code>, and a tail-alike function
+called <code>myTail</code>. We want to find out if <code>myTail</code> is called with an
+empty list, so we added an assert. Ok, so it’s a contrived example,
+but let’s see what happens:</p>
 <pre><code>$ ghci -fexternal-interpreter -prof
 GHCi, version 8.1.20160127: http://www.haskell.org/ghc/  :? for help
 Prelude&gt; :l ~/scratch/tailtest.hs 
@@ -148,10 +171,22 @@ CallStack (from -prof):
   Main.main (/home/smarlow/scratch/tailtest.hs:9:15-35)
   Main.main (/home/smarlow/scratch/tailtest.hs:9:8-36)
 *Main&gt; </code></pre>
-<p>Now, we got two stack traces, both printed by <code>assert</code>. The first comes from <a href="http://downloads.haskell.org/~ghc/latest/docs/html/users_guide/other-type-extensions.html#special-implicit-params">ImplicitParams</a>, which knows the location of the call site of <code>assert</code> because <code>assert</code> has a special <code>?callStack :: CallStack</code> constraint in its type.</p>
-<p>The second stack trace is the new one, generated by GHCi running in <code>-prof</code> mode, and has the full call stack all the way from <code>main</code>, including the fact that <code>myTail</code> was called by <code>myMap</code>. That is, it’s a dynamic call stack, not a lexical one.</p>
+<p>Now, we got two stack traces, both printed by <code>assert</code>. The first
+comes from <a href="http://downloads.haskell.org/~ghc/latest/docs/html/users_guide/other-type-extensions.html#special-implicit-params">ImplicitParams</a>,
+which knows the location of the call site of <code>assert</code> because <code>assert</code>
+has a special <code>?callStack :: CallStack</code> constraint in its type.</p>
+<p>The second stack trace is the new one, generated by GHCi running in
+<code>-prof</code> mode, and has the full call stack all the way from <code>main</code>,
+including the fact that <code>myTail</code> was called by <code>myMap</code>. That is, it’s
+a dynamic call stack, not a lexical one.</p>
 <h2 id="dumping-the-stack-from-anywhere">Dumping the stack from anywhere</h2>
-<p>Using <code>assert</code> is one way to get access to a stack trace, but sometimes you just want to print out the stack when a particular condition is hit, or when a function is called, to see what’s going on. For this reason we have <a href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/Debug-Trace.html#v:traceStack"><code>Debug.Trace.traceStack</code></a>. This is like <code>trace</code>, but it also prints out the current stack trace. For example, I just picked a random place in the code of Happy, inserted a call to <code>traceStack</code>, loaded Happy into <code>ghci -fexternal-interpreter -prof</code>, ran it and got this:</p>
+<p>Using <code>assert</code> is one way to get access to a stack trace, but
+sometimes you just want to print out the stack when a particular
+condition is hit, or when a function is called, to see what’s going
+on. For this reason we have <a href="http://haddock.stackage.org/lts-5.1/base-4.8.2.0/Debug-Trace.html#v:traceStack"><code>Debug.Trace.traceStack</code></a>.
+This is like <code>trace</code>, but it also prints out the current stack trace.
+For example, I just picked a random place in the code of Happy,
+inserted a call to <code>traceStack</code>, loaded Happy into <code>ghci -fexternal-interpreter -prof</code>, ran it and got this:</p>
 <pre><code>closure1
 CallStack (from -prof):
   LALR.closure1.addItems.fn (LALR.lhs:106:28-48)
@@ -178,37 +213,99 @@ CallStack (from -prof):
   Main.main2 (Main.lhs:74:20-43)
   Main.main2 (Main.lhs:(64,9)-(78,61))
   Main.main (Main.lhs:57:9-18)</code></pre>
-<p>You’ll notice that each function appears on the stack multiple times—this is because the the annotations are based on scopes, and GHC tries to insert annotations in useful-looking places. There might well be room for refinement here in the future.</p>
+<p>You’ll notice that each function appears on the stack multiple
+times—this is because the the annotations are based on scopes, and
+GHC tries to insert annotations in useful-looking places. There might
+well be room for refinement here in the future.</p>
 <h2 id="any-drawbacks">Any drawbacks?</h2>
-<ol style="list-style-type: decimal">
-<li><p>You have to compile your packages with profiling. Use <code>--enable-library-profiling</code> when running Cabal, or set <code>library-profiling: True</code> in your <code>.cabal/config</code>, or do the Stack equivalent.</p></li>
-<li><p>Results with calls to <code>error</code> are mixed, because the <code>error</code> calls are often lifted to the top level as a CAF, which breaks the stack simulation that the profiler does. I have ideas for some workarounds for this that I plan to try in the future.</p></li>
-<li><p>Interpreted code will run more slowly. But this is only for debugging—we didn’t change the source code, so everything still runs at full speed when compiled normally. You can also pre-compile some of your code; don’t forget to use <code>-prof</code>, and add <code>-fprof-auto-calls</code> to get stack-trace annotations for the code you compile. You can <code>:set -fobject-code -fprof-auto-calls</code> inside GHCi itself to use compiled code by default.</p></li>
+<ol type="1">
+<li><p>You have to compile your packages with profiling. Use
+<code>--enable-library-profiling</code> when running Cabal, or set
+<code>library-profiling: True</code> in your <code>.cabal/config</code>, or do the Stack
+equivalent.</p></li>
+<li><p>Results with calls to <code>error</code> are mixed, because the <code>error</code> calls
+are often lifted to the top level as a CAF, which breaks the stack
+simulation that the profiler does. I have ideas for some workarounds
+for this that I plan to try in the future.</p></li>
+<li><p>Interpreted code will run more slowly. But this is only for
+debugging—we didn’t change the source code, so everything still runs
+at full speed when compiled normally. You can also pre-compile some
+of your code; don’t forget to use <code>-prof</code>, and add <code>-fprof-auto-calls</code>
+to get stack-trace annotations for the code you compile. You can
+<code>:set -fobject-code -fprof-auto-calls</code> inside GHCi itself to use
+compiled code by default.</p></li>
 </ol>
 <h2 id="how-does-it-work">How does it work?</h2>
-<p>We’re using the existing stack-simulation that happens in GHC’s profiler, called “cost-centre stacks”. However, running in profiled mode wasn’t supported by the interpreter, and there were some serious shenanigans involved to make it possible to run profiled code in GHCi without slowing down GHCi itself.</p>
-<p>There are various differences in the way the Haskell code runs in profiling mode. The layout of heap objects is different, because every heap object points to information about the call stack that created it. This is necessary to get accurate stack simulations in the presence of things like higher-order functions, but it’s also important for the heap profiler, so that it can tell who created each heap object. When running in profiling mode, we have to do various things to maintain the runtime’s simulation of the call stack.</p>
-<p>The first step was to make the interpreter itself work in profiling mode (as in, interpret code correctly and not crash). Fortunately this wasn’t nearly as difficult as I’d anticipated: the interpreter and byte-code compiler were already nicely abstracted over the things that change in profiling mode. At this point we can already do things that weren’t possible before: profile GHCi itself, and profile Template Haskell.</p>
-<p>Next, I had to make the interpreter actually simulate the call stack for interpreted code. Again, this was reasonably straightforward, and involved using the breakpoints that GHCi already inserts into the interpreted code as SCC annotations for the profiler.</p>
-<p>So far so good: this actually worked quite nicely, but there was one huge drawback. To actually use it, we have to compile GHC itself with profiling. Which works, except that it slows down GHCi when compiling code by a factor of 2-3. That was too big a hit to deploy this as part of the standard workflow for our Haxl users at Facebook, so I needed to find a way to make it work without the overhead on the compiler.</p>
+<p>We’re using the existing stack-simulation that happens in GHC’s
+profiler, called “cost-centre stacks”. However, running in profiled
+mode wasn’t supported by the interpreter, and there were some serious
+shenanigans involved to make it possible to run profiled code in GHCi
+without slowing down GHCi itself.</p>
+<p>There are various differences in the way the Haskell code runs in
+profiling mode. The layout of heap objects is different, because every
+heap object points to information about the call stack that created
+it. This is necessary to get accurate stack simulations in the
+presence of things like higher-order functions, but it’s also
+important for the heap profiler, so that it can tell who created each
+heap object. When running in profiling mode, we have to do various
+things to maintain the runtime’s simulation of the call stack.</p>
+<p>The first step was to make the interpreter itself work in profiling
+mode (as in, interpret code correctly and not crash). Fortunately
+this wasn’t nearly as difficult as I’d anticipated: the interpreter
+and byte-code compiler were already nicely abstracted over the things
+that change in profiling mode. At this point we can already do things
+that weren’t possible before: profile GHCi itself, and profile
+Template Haskell.</p>
+<p>Next, I had to make the interpreter actually simulate the call stack
+for interpreted code. Again, this was reasonably straightforward, and
+involved using the breakpoints that GHCi already inserts into the
+interpreted code as SCC annotations for the profiler.</p>
+<p>So far so good: this actually worked quite nicely, but there was one
+huge drawback. To actually use it, we have to compile GHC itself with
+profiling. Which works, except that it slows down GHCi when
+compiling code by a factor of 2-3. That was too big a hit to deploy
+this as part of the standard workflow for our Haxl users at Facebook,
+so I needed to find a way to make it work without the overhead on the
+compiler.</p>
 <h3 id="enter-remote-ghci">Enter Remote GHCi</h3>
-<p>The solution is to separate the compiler from the interpreter, using a scheme that I’ve called Remote GHCi. The idea is that by putting the compiler and the interpreter in separate processes, the compiler can be running at full speed on a normal non-profiled runtime, while the interpreter is running in a separate process using the profiled runtime.</p>
-<div class="figure">
-<img src="../images/ghc-iserv.png" />
-
-</div>
-<p>The main complication is arranging that all the interactions between the compiler and the interpreter happen via serialized messages over a pipe. We currently have about 50 different message types, you can see them all <a href="https://phabricator.haskell.org/diffusion/GHC/browse/master/libraries/ghci/GHCi/Message.hs">here</a>. We’re currently using the <code>binary</code> library together with <code>Generic</code> instance generation, but serialization and deserialization using <code>binary</code> is definitely a bottleneck so I’m looking forward to moving to the new CBOR-based serialization library when it’s ready.</p>
-<p>It turns out that making this separation has a number of advantages aside from stack traces, which are listed on <a href="https://ghc.haskell.org/trac/ghc/wiki/RemoteGHCi">the RemoteGHCi wiki page</a>.</p>
-<p>GHCJS has been doing something similar for a while to support Template Haskell. In fact, I used the GHCJS Template Haskell code as a starting point, integrated it with GHC proper and built it out to fully support GHCi (with a couple of exceptions, notably the debugger doesn’t currently work, and <code>dynCompileExpr</code> in the GHC API cannot be supported in general).</p>
-<p>Remote GHCi also works for Template Haskell and Quasi Quotes, and has the advantage that when compiling TH code with <code>-prof -fexternal-interpreter</code>, you don’t need to first compile it without <code>-prof</code>, because we can run the <code>-prof</code> code directly in the external interpreter process.</p>
+<p>The solution is to separate the compiler from the interpreter, using a
+scheme that I’ve called Remote GHCi. The idea is that by putting the
+compiler and the interpreter in separate processes, the compiler can
+be running at full speed on a normal non-profiled runtime, while the
+interpreter is running in a separate process using the profiled
+runtime.</p>
+<p><img src="../images/ghc-iserv.png" /></p>
+<p>The main complication is arranging that all the interactions between
+the compiler and the interpreter happen via serialized messages over a
+pipe. We currently have about 50 different message types, you can see
+them all <a href="https://phabricator.haskell.org/diffusion/GHC/browse/master/libraries/ghci/GHCi/Message.hs">here</a>.
+We’re currently using the <code>binary</code> library together with <code>Generic</code>
+instance generation, but serialization and deserialization using
+<code>binary</code> is definitely a bottleneck so I’m looking forward to moving
+to the new CBOR-based serialization library when it’s ready.</p>
+<p>It turns out that making this separation has a number of advantages
+aside from stack traces, which are listed on <a href="https://ghc.haskell.org/trac/ghc/wiki/RemoteGHCi">the RemoteGHCi
+wiki page</a>.</p>
+<p>GHCJS has been doing something similar for a while to support Template
+Haskell. In fact, I used the GHCJS Template Haskell code as a
+starting point, integrated it with GHC proper and built it out to
+fully support GHCi (with a couple of exceptions, notably the debugger
+doesn’t currently work, and <code>dynCompileExpr</code> in the GHC API cannot be
+supported in general).</p>
+<p>Remote GHCi also works for Template Haskell and Quasi Quotes, and has
+the advantage that when compiling TH code with <code>-prof -fexternal-interpreter</code>, you don’t need to first compile it without
+<code>-prof</code>, because we can run the <code>-prof</code> code directly in the external
+interpreter process.</p>
 <h2 id="three-kinds-of-stack-trace-in-ghc-8.0.1">Three kinds of stack trace in GHC 8.0.1</h2>
-<p>There’s a lot happening on the stack trace front. We now have no less than three ways to get a stack trace:</p>
+<p>There’s a lot happening on the stack trace front. We now have no less
+than three ways to get a stack trace:</p>
 <ul>
 <li>Profiling: <code>ghc -prof -fprof-auto</code> and <code>ghci -fexternal-interprter -prof</code></li>
 <li>ImplicitParams, with the magic <code>?callStack :: CallStack</code> constraint (now called <code>HasCallStack</code>).</li>
 <li>DWARF: <code>ghc -g</code></li>
 </ul>
-<p>Each of these has advantages and disadvantages, and none of them are subsumed by any of the others (sadly!). I’ll try to summarise:</p>
+<p>Each of these has advantages and disadvantages, and none of them are
+subsumed by any of the others (sadly!). I’ll try to summarise:</p>
 <ul>
 <li><p><strong>Profiling</strong></p>
 <ul>
@@ -222,29 +319,47 @@ CallStack (from -prof):
 </ul></li>
 <li><p><strong>ImplicitParams</strong></p>
 <ul>
-<li>Good for finding the call site of particular functions, like <code>error</code> or <code>undefined</code></li>
+<li>Good for finding the call site of particular functions, like
+<code>error</code> or <code>undefined</code></li>
 </ul>
 <p>But:</p>
 <ul>
 <li>Requires explicit code changes to propagate the stack</li>
-<li>Some runtime overhead (stacks get constructed and passed around at runtime)</li>
+<li>Some runtime overhead (stacks get constructed and passed around at
+runtime)</li>
 <li>Shows up in types as <code>HasCallStack</code> constraints</li>
-<li>Lexical, not dynamic. (In <code>g = map f</code>, <code>g</code> calls <code>f</code> rather than <code>map</code> calling <code>f</code>)</li>
+<li>Lexical, not dynamic. (In <code>g = map f</code>, <code>g</code> calls <code>f</code> rather than
+<code>map</code> calling <code>f</code>)</li>
 </ul>
-<p>Could you change GHC so that it automatically adds <code>HasCallStack</code> constraints everywhere and also hides them from the user, to get the effect of full call-stack coverage? Maybe - that would be an alternative to the scheme I’ve implemented on top of profiling. One difficult area is CAFs, though. If a constraint is added to a CAF, then the CAF is re-evaluated each time it is called, which is obviously undesirable. The profiler goes to some lengths to avoid changing the asymptotic cost of things, but trades off some information in the stack simulation in the process, which is why calls to <code>error</code> sometimes don’t get accurate call stack information.</p></li>
+<p>Could you change GHC so that it automatically adds <code>HasCallStack</code>
+constraints everywhere and also hides them from the user, to get
+the effect of full call-stack coverage? Maybe - that would be an
+alternative to the scheme I’ve implemented on top of profiling.
+One difficult area is CAFs, though. If a constraint is added to a
+CAF, then the CAF is re-evaluated each time it is called, which is
+obviously undesirable. The profiler goes to some lengths to avoid
+changing the asymptotic cost of things, but trades off some information in
+the stack simulation in the process, which is why calls to <code>error</code>
+sometimes don’t get accurate call stack information.</p></li>
 <li><p><strong>DWARF</strong></p>
 <ul>
 <li>No runtime overhead, can be deployed in production.</li>
-<li>Good when you’re not willing to sacrifice any performance, but having some information is better than none when something goes wrong.</li>
+<li>Good when you’re not willing to sacrifice any performance, but
+having some information is better than none when something goes
+wrong.</li>
 </ul>
 <p>But:</p>
 <ul>
-<li>Gives the raw execution stack, so we lose information due to tail-calls and lazy evaluation.</li>
+<li>Gives the raw execution stack, so we lose information due to
+tail-calls and lazy evaluation.</li>
 </ul></li>
 </ul>
 <h2 id="conclusion">Conclusion</h2>
-<p>We now have full stack traces inside GHCi, provided you compile your packages for profiling, and use <code>ghci -fexternal-interpreter -prof</code>.</p>
-<p>Remote GHCi is not the default in GHC 8.0.1, but it’s available with the flag <code>-fexternal-interpreter</code>. Please try it out and let me know how you get on!</p>
+<p>We now have full stack traces inside GHCi, provided you compile your
+packages for profiling, and use <code>ghci -fexternal-interpreter -prof</code>.</p>
+<p>Remote GHCi is not the default in GHC 8.0.1, but it’s available with
+the flag <code>-fexternal-interpreter</code>. Please try it out and let me know
+how you get on!</p>
 </div>
 
       </div>

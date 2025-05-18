@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -111,7 +111,16 @@
   <h1 class="page-title">{H}askell on a Shared-Memory Multiprocessor</h1>
   <p>(Tim Harris, Simon Marlow, Simon Peyton Jones) <em>Haskell ’05: Proceedings of the 2005 ACM SIGPLAN workshop on Haskell</em>, pages 49–61, Tallinn, Estonia, ACM Press, September 2005</p>
 <p><a href="http://simonmar.github.io/bib/papers/multiproc.pdf">Full Paper</a> | <a href="multiproc05.bib">BibTeX</a></p>
-<p>Multi-core processors are coming, and we need ways to program them. The combination of purely-functional programming and explicit, monadic threads, communicating using transactional memory, looks like a particularly promising way to do so. This paper describes a full-scale implementation of shared-memory parallel Haskell, based on the Glasgow Haskell Compiler. Our main technical contribution is a lock-free mechanism for evaluating shared thunks that eliminates the major performance bottleneck in parallel evaluation of a lazy language. Our results are preliminary but promising: we can demonstrate wall-clock speedups of a serious application (GHC itself), even with only two processors, compared to the same application compiled for a uni-processor.</p>
+<p>Multi-core processors are coming, and we need ways to program them.
+The combination of purely-functional programming and explicit, monadic threads,
+communicating using transactional memory, looks like a particularly promising
+way to do so. This paper describes a full-scale implementation of shared-memory
+parallel Haskell, based on the Glasgow Haskell Compiler. Our main technical
+contribution is a lock-free mechanism for evaluating shared thunks that eliminates
+the major performance bottleneck in parallel evaluation of a lazy language.
+Our results are preliminary but promising: we can demonstrate wall-clock speedups
+of a serious application (GHC itself), even with only two processors, compared
+to the same application compiled for a uni-processor.</p>
 </div>
 
       </div>

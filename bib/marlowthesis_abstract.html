@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -110,13 +110,37 @@
         <div class="page">
   <h1 class="page-title">Deforestation for Higher-Order Functional Programs</h1>
   <p>(Simon Marlow) **, PhD thesis, University of Glasgow, 1996</p>
-<div style="white-space: pre-line;"><a href="marlowthesis.bib">BibTeX</a></div>
-<p>Functional programming languages are an ideal medium for program optimisations based on source-to-source transformation techniques. Referential transparency affords opportunities for a wide range of correctness-preserving transformations leading to potent optimisation strategies.</p>
-<p>This thesis builds on deforestation, a program transformation technique due to Wadler that removes intermediate data structures from first-order functional programs.</p>
-<p>Our contribution is to reformulate deforestation for higher-order functional programming languages, and to show that the resulting algorithm terminates given certain syntactic and typing constraints on the input. These constraints are entirely reasonable, indeed it is possible to translate any typed program into the required syntactic form. We show how this translation can be performed automatically and optimally.</p>
-<p>The higher-order deforestation algorithm is {}. That is, it is possible to determine by examination of the source program where the optimisation will be applicable.</p>
-<p>We also investigate the relationship of deforestation to cut-elimination, the normalisation property for the logic of sequent calculus. By combining a cut-elimination algorithm and first-order deforestation, we derive an improved higher-order deforestation algorithm.</p>
-<p>The higher-order deforestation algorithm has been implemented in the Glasgow Haskell Compiler. We describe how deforestation fits into the framework of Haskell, and design a model for the implementation that allows automatic list removal, with additional deforestation being performed on the basis of programmer supplied annotations. Results from applying the deforestation implementation to several example Haskell programs are given.</p>
+<div class="line-block"><a href="marlowthesis.bib">BibTeX</a></div>
+<p>Functional programming languages are an ideal medium for program
+optimisations based on source-to-source transformation techniques.
+Referential transparency affords opportunities for a wide range of
+correctness-preserving transformations leading to potent optimisation
+strategies.</p>
+<p>This thesis builds on deforestation, a program transformation
+technique due to Wadler that removes intermediate data structures from
+first-order functional programs.</p>
+<p>Our contribution is to reformulate deforestation for higher-order
+functional programming languages, and to show that the resulting
+algorithm terminates given certain syntactic and typing constraints on
+the input. These constraints are entirely reasonable, indeed it is
+possible to translate any typed program into the required syntactic
+form. We show how this translation can be performed automatically and
+optimally.</p>
+<p>The higher-order deforestation algorithm is {}. That
+is, it is possible to determine by examination of the source program
+where the optimisation will be applicable.</p>
+<p>We also investigate the relationship of deforestation to
+cut-elimination, the normalisation property for the logic of sequent
+calculus. By combining a cut-elimination algorithm and first-order
+deforestation, we derive an improved higher-order deforestation
+algorithm.</p>
+<p>The higher-order deforestation algorithm has been implemented in the
+Glasgow Haskell Compiler. We describe how deforestation fits into the
+framework of Haskell, and design a model for the implementation that
+allows automatic list removal, with additional deforestation being
+performed on the basis of programmer supplied annotations. Results
+from applying the deforestation implementation to several example
+Haskell programs are given.</p>
 </div>
 
       </div>

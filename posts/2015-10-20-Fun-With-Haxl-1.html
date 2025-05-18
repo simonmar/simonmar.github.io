@@ -50,7 +50,7 @@
   <div class="sidebar-item">
     <img src="../images/simonmarlow.jpg" />
     <p>Simon Marlow</p>
-    <p>Software Engineer at Facebook in London</p>
+    <p>Former Software Engineer at Meta in London</p>
     <p>Co-developer of the
       <a href="http://www.haskell.org/ghc">Glasgow Haskell
  Compiler</a>
@@ -82,7 +82,7 @@
 
   <div class="sidebar-item">
     <p>
-      &copy; Simon Marlow 2016
+      &copy; Simon Marlow 2016-2025
     </p>
   </div>
 </div>
@@ -110,13 +110,37 @@
         <div class="post">
   <h1 class="post-title">Fun With Haxl (Part 1)</h1>
   <span class="post-date">October 20, 2015</span>
-  <p>This is a blog-post version of a talk I recently gave at the <a href="https://skillsmatter.com/conferences/7069-haskell-exchange-2015">Haskell eXchange 2015</a>. The video of the talk is <a href="https://skillsmatter.com/skillscasts/6644-keynote-from-simon-marlow">here</a>, but there were a lot of questions during the talk which aren’t very audible on the video, so hopefully this post will be useful to folks who weren’t at the event.</p>
-<p>If you want to play with the examples yourself, the code is available <a href="https://github.com/simonmar/haskell-eXchange-2015">on github</a>, and to run the examples you’ll need to <code>cabal install haxl sqlite</code> first, or the <code>stack</code> equivalent.</p>
+  <p>This is a blog-post version of a talk I recently gave at the <a href="https://skillsmatter.com/conferences/7069-haskell-exchange-2015">Haskell
+eXchange 2015</a>. The video of the talk is <a href="https://skillsmatter.com/skillscasts/6644-keynote-from-simon-marlow">here</a>,
+but there were a lot of questions during the talk which aren’t very
+audible on the video, so hopefully this post will be useful to folks
+who weren’t at the event.</p>
+<p>If you want to play with the examples yourself, the code is available
+<a href="https://github.com/simonmar/haskell-eXchange-2015">on
+github</a>, and to run the examples you’ll need to <code>cabal install haxl sqlite</code> first, or the <code>stack</code> equivalent.</p>
 <h2 id="what-is-haxl">What is Haxl?</h2>
-<p><a href="https://github.com/facebook/Haxl">Haxl</a> is a library that was developed for solving a very specific problem at Facebook: we wanted to write purely functional code, including data-fetching operations, and have the data-fetches automatically batched and performed concurrently as far as possible. This is exactly what Haxl does, and it has been <a href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">running in production at Facebook</a> as part of the anti-abuse infrastructure for nearly a year now.</p>
-<p>Although it was designed for this specific purpose, we can put Haxl to use for a wide range of tasks where implicit concurrency is needed: not just data-fetching, but other remote data operations (including writes), and it works perfectly well for batching and overlapping local I/O operations too. In this blog post (series) I’ll start by reflecting on how to use Haxl for what it was intended for, and then move on to give examples of some of the other things we can use Haxl for. In the final example, I’ll use Haxl to implement a parallel build system.</p>
+<p><a href="https://github.com/facebook/Haxl">Haxl</a> is a library that
+was developed for solving a very specific problem at Facebook: we
+wanted to write purely functional code, including data-fetching
+operations, and have the data-fetches automatically batched and
+performed concurrently as far as possible. This is exactly what Haxl
+does, and it has been <a href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">running
+in production at Facebook</a> as part of the anti-abuse infrastructure
+for nearly a year now.</p>
+<p>Although it was designed for this specific purpose, we can put Haxl to
+use for a wide range of tasks where implicit concurrency is needed:
+not just data-fetching, but other remote data operations (including
+writes), and it works perfectly well for batching and overlapping
+local I/O operations too. In this blog post (series) I’ll start by
+reflecting on how to use Haxl for what it was intended for, and then
+move on to give examples of some of the other things we can use Haxl
+for. In the final example, I’ll use Haxl to implement a parallel
+build system.</p>
 <h2 id="example-accessing-data-for-a-blog">Example: accessing data for a blog</h2>
-<p>Let’s suppose you’re writing a blog (an old-fashioned one with dynamically-generated pages!) and you want to store the content and metadata for the blog in a database. I’ve made an example database called <code>blog.sqlite</code>, and we can poke around to see what’s in it:</p>
+<p>Let’s suppose you’re writing a blog (an old-fashioned one with
+dynamically-generated pages!) and you want to store the content and
+metadata for the blog in a database. I’ve made an example database
+called <code>blog.sqlite</code>, and we can poke around to see what’s in it:</p>
 <pre><code>$ sqlite3 blog.sqlite
 SQLite version 3.8.2 2013-12-06 14:53:30
 Enter &quot;.help&quot; for instructions
@@ -137,20 +161,33 @@ sqlite&gt; select * from postcontent;
 2|example content 2
 3|example content 3
 ...</code></pre>
-<p>There are a couple of tables that we’re interested in: <code>postinfo</code>, which contains the metadata, and <code>postcontent</code>, which contains the content. Both are indexed by <code>postid</code>, an integer key for each post.</p>
-<p>Now, let’s make a little Haskell API for accessing the blog data. I’ll do this twice: first by calling an SQL library directly, and then using Haxl, to compare the two.</p>
-<p>The code for the direct implementation is in <a href="https://github.com/simonmar/haskell-eXchange-2015/blob/3ae0e34a051201eb77721bee2e940ec1f764a0df/BlogDB.hs">BlogDB.hs</a>, using the simple <code>sqlite</code> package for accessing the sqlite DB (there are other more elaborate and type-safe abstractions for accessing databases, but that is orthogonal to the issues we’re interested in here, so I’m using <code>sqlite</code> to keep things simple).</p>
-<p>In our simple API, there’s a monad, <code>Blog</code>, in which we can access the blog data, a function <code>run</code> for executing a <code>Blog</code> computation, and two operations, <code>getPostIds</code> and <code>getPostContent</code> for making specific queries in the <code>Blog</code> monad. To summarise:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Blog</span> a  <span class="co">-- a monad</span>
-
-<span class="ot">run ::</span> <span class="dt">Blog</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> a
-
-<span class="kw">type</span> <span class="dt">PostId</span> <span class="fu">=</span> <span class="dt">Int</span>
-<span class="kw">type</span> <span class="dt">PostContent</span> <span class="fu">=</span> <span class="dt">String</span>
-
-<span class="ot">getPostIds     ::</span> <span class="dt">Blog</span> [<span class="dt">PostId</span>]
-<span class="ot">getPostContent ::</span> <span class="dt">PostId</span> <span class="ot">-&gt;</span> <span class="dt">Blog</span> <span class="dt">PostContent</span></code></pre></div>
-<p>The implementation of the API will print out the queries it is making, so that we can see what’s happening when we call these functions. Let’s use this API to query our example DB:</p>
+<p>There are a couple of tables that we’re interested in: <code>postinfo</code>,
+which contains the metadata, and <code>postcontent</code>, which contains the
+content. Both are indexed by <code>postid</code>, an integer key for each post.</p>
+<p>Now, let’s make a little Haskell API for accessing the blog data.
+I’ll do this twice: first by calling an SQL library directly, and then
+using Haxl, to compare the two.</p>
+<p>The code for the direct implementation is in <a href="https://github.com/simonmar/haskell-eXchange-2015/blob/3ae0e34a051201eb77721bee2e940ec1f764a0df/BlogDB.hs">BlogDB.hs</a>, using
+the simple <code>sqlite</code> package for accessing the sqlite DB (there are
+other more elaborate and type-safe abstractions for accessing
+databases, but that is orthogonal to the issues we’re interested in
+here, so I’m using <code>sqlite</code> to keep things simple).</p>
+<p>In our simple API, there’s a monad, <code>Blog</code>, in which we can access the
+blog data, a function <code>run</code> for executing a <code>Blog</code> computation, and
+two operations, <code>getPostIds</code> and <code>getPostContent</code> for making specific
+queries in the <code>Blog</code> monad. To summarise:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">Blog</span> a  <span class="co">-- a monad</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ot">run ::</span> <span class="dt">Blog</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> a</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">PostId</span> <span class="ot">=</span> <span class="dt">Int</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">PostContent</span> <span class="ot">=</span> <span class="dt">String</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="ot">getPostIds     ::</span> <span class="dt">Blog</span> [<span class="dt">PostId</span>]</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="ot">getPostContent ::</span> <span class="dt">PostId</span> <span class="ot">-&gt;</span> <span class="dt">Blog</span> <span class="dt">PostContent</span></span></code></pre></div>
+<p>The implementation of the API will print out the queries it is making,
+so that we can see what’s happening when we call these functions.
+Let’s use this API to query our example DB:</p>
 <pre><code>GHCi, version 7.11.20150924: http://www.haskell.org/ghc/  :? for help
 [1 of 1] Compiling BlogDB           ( BlogDB.hs, interpreted )
 Ok, modules loaded: BlogDB.
@@ -174,23 +211,34 @@ select content from postcontent where postid = 12;
 [&quot;example content 1&quot;,&quot;example content 2&quot;,&quot;example content 3&quot;,&quot;example content 4&quot;,&quot;example content 5&quot;,&quot;example content 6&quot;,&quot;example content 7&quot;,&quot;example content 8&quot;,&quot;example content 9&quot;,&quot;example content 10&quot;,&quot;example content 11&quot;,&quot;example content 12&quot;]
 *BlogDB&gt; </code></pre>
 <h2 id="the-problem-batching-queries">The problem: batching queries</h2>
-<p>Now, the issue with this API is that every call to <code>getPostContent</code> results in a separate <code>select</code> query. The <code>mapM</code> call in the above example gave rise to one <code>select</code> query to fetch the contents of each post separately.</p>
+<p>Now, the issue with this API is that every call to <code>getPostContent</code>
+results in a separate <code>select</code> query. The <code>mapM</code> call in the above
+example gave rise to one <code>select</code> query to fetch the contents of each
+post separately.</p>
 <p>Ideally, rather than</p>
 <pre><code>select content from postcontent where postid = 1;
 select content from postcontent where postid = 2;
 select content from postcontent where postid = 3;</code></pre>
 <p>What we would like to see is something like</p>
 <pre><code>select content from postcontent where postid in (1,2,3);</code></pre>
-<p>This kind of batching is particularly important when the database is remote, or large, or both.</p>
+<p>This kind of batching is particularly important when the database is
+remote, or large, or both.</p>
 <p>One way to solve the problem is to add a new API for this query, e.g.:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">multiGetPostContents ::</span> [<span class="dt">PostId</span>] <span class="ot">-&gt;</span> <span class="dt">IO</span> [<span class="dt">PostContent</span>]</code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ot">multiGetPostContents ::</span> [<span class="dt">PostId</span>] <span class="ot">-&gt;</span> <span class="dt">IO</span> [<span class="dt">PostContent</span>]</span></code></pre></div>
 <p>But there are several problems with this:</p>
 <ul>
 <li><p>Clients have to remember to call it, rather than using <code>mapM</code>.</p></li>
-<li><p>If we’re fetching post content in multiple parts of our code, we would have to arrange to do the fetching in one place and plumb the results to the places that need the data, which might involve restructuring our code in an unnatural way, purely for efficiency reasons.</p></li>
-<li><p>From a taste perspective, <code>multiGetPostContents</code> duplicates the functionality of <code>mapM getPostContent</code>, which is ugly.</p></li>
+<li><p>If we’re fetching post content in multiple parts of our code, we
+would have to arrange to do the fetching in one place and plumb the
+results to the places that need the data, which might involve
+restructuring our code in an unnatural way, purely for efficiency
+reasons.</p></li>
+<li><p>From a taste perspective, <code>multiGetPostContents</code> duplicates
+the functionality of <code>mapM getPostContent</code>, which is ugly.</p></li>
 </ul>
-<p>This is the problem that Haxl was designed to solve. We’ll look at how to implement this API on top of Haxl in the next couple of sections, but just to demonstrate the effect, let’s try it out first:</p>
+<p>This is the problem that Haxl was designed to solve. We’ll look at
+how to implement this API on top of Haxl in the next couple of sections, but
+just to demonstrate the effect, let’s try it out first:</p>
 <pre><code>Prelude&gt; :l HaxlBlog
 [1 of 2] Compiling BlogDataSource   ( BlogDataSource.hs, interpreted )
 [2 of 2] Compiling HaxlBlog         ( HaxlBlog.hs, interpreted )
@@ -200,74 +248,121 @@ select postid from postinfo;
 select postid,content from postcontent where postid in (12,11,10,9,8,7,6,5,4,3,2,1)
 [&quot;example content 1&quot;,&quot;example content 2&quot;,&quot;example content 3&quot;,&quot;example content 4&quot;,&quot;example content 5&quot;,&quot;example content 6&quot;,&quot;example content 7&quot;,&quot;example content 8&quot;,&quot;example content 9&quot;,&quot;example content 10&quot;,&quot;example content 11&quot;,&quot;example content 12&quot;]
 *HaxlBlog&gt;</code></pre>
-<p>Even though we used the standard <code>mapM</code> function to perform multiple <code>getPostContent</code> calls, they were batched together and executed as a single <code>select</code> query.</p>
+<p>Even though we used the standard <code>mapM</code> function to perform multiple
+<code>getPostContent</code> calls, they were batched together and executed as a
+single <code>select</code> query.</p>
 <h2 id="introduction-to-haxl">Introduction to Haxl</h2>
-<p>You can find the full documentation for Haxl <a href="http://hackage.haskell.org/package/haxl">here</a>, but in this section I’ll walk through the most important parts, and then we’ll implement our own data source for the blog database.</p>
+<p>You can find the full documentation for Haxl <a href="http://hackage.haskell.org/package/haxl">here</a>, but in this
+section I’ll walk through the most important parts, and then we’ll
+implement our own data source for the blog database.</p>
 <p>Haxl is a Monad:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">newtype</span> <span class="dt">GenHaxl</span> u a
-
-<span class="kw">instance</span> <span class="dt">Functor</span> (<span class="dt">GenHaxl</span> u)
-<span class="kw">instance</span> <span class="dt">Applicative</span> (<span class="dt">GenHaxl</span> u)
-<span class="kw">instance</span> <span class="dt">Monad</span> (<span class="dt">GenHaxl</span> u)</code></pre></div>
-<p>It is generalised over a type variable <code>u</code>, which can be used to pass around some user-defined data throughout a Haxl computation. For example, in our application at Facebook we instantiate <code>u</code> with the data passed in with the request that we’re processing.</p>
-<p>Essentially there is a <code>Reader</code> monad built-in to Haxl. (this might not be the cleanest design, but it is the way it is.) Throughout the following we’re not going to be using the <code>u</code> parameter, and I’ll often instantiate it with <code>()</code>, like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Haxl</span> a <span class="fu">=</span> <span class="dt">GenHaxl</span> () a</code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">newtype</span> <span class="dt">GenHaxl</span> u a</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> <span class="dt">Functor</span> (<span class="dt">GenHaxl</span> u)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> <span class="dt">Applicative</span> (<span class="dt">GenHaxl</span> u)</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> <span class="dt">Monad</span> (<span class="dt">GenHaxl</span> u)</span></code></pre></div>
+<p>It is generalised over a type variable <code>u</code>, which can be used to pass
+around some user-defined data throughout a Haxl computation. For
+example, in our application at Facebook we instantiate <code>u</code> with the
+data passed in with the request that we’re processing.</p>
+<p>Essentially there is a <code>Reader</code> monad built-in to Haxl. (this might
+not be the cleanest design, but it is the way it is.) Throughout the
+following we’re not going to be using the <code>u</code> parameter, and I’ll
+often instantiate it with <code>()</code>, like this:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">Haxl</span> a <span class="ot">=</span> <span class="dt">GenHaxl</span> () a</span></code></pre></div>
 <p>The most important operation in Haxl is <code>dataFetch</code>:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">dataFetch ::</span> (<span class="dt">DataSource</span> u r, <span class="dt">Request</span> r a) <span class="ot">=&gt;</span> r a <span class="ot">-&gt;</span> <span class="dt">GenHaxl</span> u a</code></pre></div>
-<p>This is how a user of Haxl fetches some data from a <em>data source</em> (in our example, from the blog database). The Haxl library is designed so that you can use multiple user-defined data sources simultaneously.</p>
-<p>The argument of type <code>r a</code> is a request, where <code>r</code> is the request type constructor, and <code>a</code> is the type of the result we’re expecting. The <code>r</code> type is defined by the data source you’re using, which should also supply appropriate instances of <code>DataSource</code> and <code>Request</code>. For example, the request type for our blog looks like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">BlogRequest</span> a <span class="kw">where</span>
-  <span class="dt">FetchPosts</span><span class="ot">       ::</span> <span class="dt">BlogRequest</span> [<span class="dt">PostId</span>]
-  <span class="dt">FetchPostContent</span><span class="ot"> ::</span> <span class="dt">PostId</span> <span class="ot">-&gt;</span> <span class="dt">BlogRequest</span> <span class="dt">PostContent</span></code></pre></div>
-<p>Note that we’re using a GADT, because we have two different requests which each produce a result of a different type.</p>
-<p>Next, our request type needs to satisfy the <code>Request</code> constraint. <code>Request</code> is defined like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Request</span> req a <span class="fu">=</span>
-  ( <span class="dt">Eq</span> (req a)
-  , <span class="dt">Hashable</span> (req a)
-  , <span class="dt">Typeable</span> (req a)
-  , <span class="dt">Show</span> (req a)
-  , <span class="dt">Show</span> a
-  )</code></pre></div>
-<p>That is, it is a synonym for a handful of type class constraints that are all straightforward boilerplate. (defining constraint-synonyms like this requires the <code>ConstraintKinds</code> extension, and it’s a handy trick to know).</p>
-<p>The other constraint we need to satisfy is <code>DataSource</code>, which is defined like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">class</span> (<span class="dt">DataSourceName</span> req, <span class="dt">StateKey</span> req, <span class="dt">Show1</span> req)
-       <span class="ot">=&gt;</span> <span class="dt">DataSource</span> u req <span class="kw">where</span>
-  fetch
-<span class="ot">    ::</span> <span class="dt">State</span> req
-    <span class="ot">-&gt;</span> <span class="dt">Flags</span>
-    <span class="ot">-&gt;</span> u
-    <span class="ot">-&gt;</span> [<span class="dt">BlockedFetch</span> req]
-    <span class="ot">-&gt;</span> <span class="dt">PerformFetch</span></code></pre></div>
-<p><code>DataSource</code> has a single method, <code>fetch</code>, which is used by Haxl to execute requests for this data source. The key point is that <code>fetch</code> is passed a list of <code>BlockedFetch</code> values, each of which contains a single request. The <code>BlockedFetch</code> type is defined like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">BlockedFetch</span> r <span class="fu">=</span> forall a<span class="fu">.</span> <span class="dt">BlockedFetch</span> (r a) (<span class="dt">ResultVar</span> a)</code></pre></div>
-<p>That is, it contains a request of type <code>r a</code>, and a <code>ResultVar a</code> which is a container to store the result in. The <code>fetch</code> implementation can store the result using one of these two functions:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">putSuccess ::</span> <span class="dt">ResultVar</span> a <span class="ot">-&gt;</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
-<span class="ot">putFailure ::</span> (<span class="dt">Exception</span> e) <span class="ot">=&gt;</span> <span class="dt">ResultVar</span> a <span class="ot">-&gt;</span> e <span class="ot">-&gt;</span> <span class="dt">IO</span> ()</code></pre></div>
-<p>Because <code>fetch</code> is passed a <em>list</em> of <code>BlockedFetch</code>, it can collect together requests and satisfy them using a single query to the database, or perform them concurrently, or use whatever methods are available for performing multiple requests simultaneously.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="ot">dataFetch ::</span> (<span class="dt">DataSource</span> u r, <span class="dt">Request</span> r a) <span class="ot">=&gt;</span> r a <span class="ot">-&gt;</span> <span class="dt">GenHaxl</span> u a</span></code></pre></div>
+<p>This is how a user of Haxl fetches some data from a <em>data source</em>
+(in our example, from the blog database). The Haxl library is designed
+so that you can use multiple user-defined data sources simultaneously.</p>
+<p>The argument of type <code>r a</code> is a request, where <code>r</code> is the request type
+constructor, and <code>a</code> is the type of the result we’re expecting. The
+<code>r</code> type is defined by the data source you’re using, which should also
+supply appropriate instances of <code>DataSource</code> and <code>Request</code>. For
+example, the request type for our blog looks like this:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">data</span> <span class="dt">BlogRequest</span> a <span class="kw">where</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">FetchPosts</span><span class="ot">       ::</span> <span class="dt">BlogRequest</span> [<span class="dt">PostId</span>]</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">FetchPostContent</span><span class="ot"> ::</span> <span class="dt">PostId</span> <span class="ot">-&gt;</span> <span class="dt">BlogRequest</span> <span class="dt">PostContent</span></span></code></pre></div>
+<p>Note that we’re using a GADT, because we have two different requests
+which each produce a result of a different type.</p>
+<p>Next, our request type needs to satisfy the <code>Request</code> constraint.
+<code>Request</code> is defined like this:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">Request</span> req a <span class="ot">=</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  ( <span class="dt">Eq</span> (req a)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  , <span class="dt">Hashable</span> (req a)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  , <span class="dt">Typeable</span> (req a)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  , <span class="dt">Show</span> (req a)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  , <span class="dt">Show</span> a</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div>
+<p>That is, it is a synonym for a handful of type class constraints that
+are all straightforward boilerplate. (defining constraint-synonyms
+like this requires the <code>ConstraintKinds</code> extension, and it’s a handy
+trick to know).</p>
+<p>The other constraint we need to satisfy is <code>DataSource</code>, which is
+defined like this:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> (<span class="dt">DataSourceName</span> req, <span class="dt">StateKey</span> req, <span class="dt">Show1</span> req)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>       <span class="ot">=&gt;</span> <span class="dt">DataSource</span> u req <span class="kw">where</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  fetch</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="ot">    ::</span> <span class="dt">State</span> req</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="ot">-&gt;</span> <span class="dt">Flags</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="ot">-&gt;</span> u</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="ot">-&gt;</span> [<span class="dt">BlockedFetch</span> req]</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="ot">-&gt;</span> <span class="dt">PerformFetch</span></span></code></pre></div>
+<p><code>DataSource</code> has a single method, <code>fetch</code>, which is used by Haxl to
+execute requests for this data source. The key point is that <code>fetch</code>
+is passed a list of <code>BlockedFetch</code> values, each of which contains
+a single request. The <code>BlockedFetch</code> type is defined like this:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">data</span> <span class="dt">BlockedFetch</span> r <span class="ot">=</span> <span class="kw">forall</span> a<span class="op">.</span> <span class="dt">BlockedFetch</span> (r a) (<span class="dt">ResultVar</span> a)</span></code></pre></div>
+<p>That is, it contains a request of type <code>r a</code>, and a <code>ResultVar a</code>
+which is a container to store the result in. The <code>fetch</code>
+implementation can store the result using one of these two functions:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ot">putSuccess ::</span> <span class="dt">ResultVar</span> a <span class="ot">-&gt;</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> ()</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ot">putFailure ::</span> (<span class="dt">Exception</span> e) <span class="ot">=&gt;</span> <span class="dt">ResultVar</span> a <span class="ot">-&gt;</span> e <span class="ot">-&gt;</span> <span class="dt">IO</span> ()</span></code></pre></div>
+<p>Because <code>fetch</code> is passed a <em>list</em> of <code>BlockedFetch</code>, it can collect
+together requests and satisfy them using a single query to the
+database, or perform them concurrently, or use whatever methods are
+available for performing multiple requests simultaneously.</p>
 <p>The <code>fetch</code> method returns <code>PerformFetch</code>, which is defined like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">PerformFetch</span>
-  <span class="fu">=</span> <span class="dt">SyncFetch</span>  (<span class="dt">IO</span> ())
-  <span class="fu">|</span> <span class="dt">AsyncFetch</span> (<span class="dt">IO</span> () <span class="ot">-&gt;</span> <span class="dt">IO</span> ())</code></pre></div>
-<p>For our purposes here, we’ll only use <code>SyncFetch</code>, which should contain an <code>IO</code> action whose job it is to fill in all the results in the <code>BlockedFetch</code>es before it returns. The alternative <code>AsyncFetch</code> can be used to overlap requests from multiple data sources.</p>
-<p>Lastly, let’s talk about state. Most data sources will need some state; in the case of our blog database we need to keep track of the handle to the database so that we don’t have to open a fresh one each time we make some queries. In Haxl, data source state is represented using an associated data type called <code>State</code>, which is defined by the <code>StateKey</code> class:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">class</span> <span class="dt">Typeable</span> f <span class="ot">=&gt;</span> <span class="dt">StateKey</span> (<span class="ot">f ::</span> <span class="fu">*</span> <span class="ot">-&gt;</span> <span class="fu">*</span>) <span class="kw">where</span>
-  <span class="kw">data</span> <span class="dt">State</span> f</code></pre></div>
-<p>So every data source with request type <code>req</code> defines a state of type <code>State req</code>, which can of course be empty if the data source doesn’t need any state. Our blog data source defines it like this:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">instance</span> <span class="dt">StateKey</span> <span class="dt">BlogRequest</span> <span class="kw">where</span>
-  <span class="kw">data</span> <span class="dt">State</span> <span class="dt">BlogRequest</span> <span class="fu">=</span> <span class="dt">BlogDataState</span> <span class="dt">SQLiteHandle</span></code></pre></div>
-<p>The <code>State req</code> for a data source is passed to <code>fetch</code> each time it is called.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">data</span> <span class="dt">PerformFetch</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="ot">=</span> <span class="dt">SyncFetch</span>  (<span class="dt">IO</span> ())</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span> <span class="dt">AsyncFetch</span> (<span class="dt">IO</span> () <span class="ot">-&gt;</span> <span class="dt">IO</span> ())</span></code></pre></div>
+<p>For our purposes here, we’ll only use <code>SyncFetch</code>, which should contain an
+<code>IO</code> action whose job it is to fill in all the results in the
+<code>BlockedFetch</code>es before it returns. The alternative <code>AsyncFetch</code> can
+be used to overlap requests from multiple data sources.</p>
+<p>Lastly, let’s talk about state. Most data sources will need some
+state; in the case of our blog database we need to keep track of the
+handle to the database so that we don’t have to open a fresh one each
+time we make some queries. In Haxl, data source state is represented
+using an associated data type called <code>State</code>, which is defined by the
+<code>StateKey</code> class:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="dt">Typeable</span> f <span class="ot">=&gt;</span> <span class="dt">StateKey</span> (<span class="ot">f ::</span> <span class="op">*</span> <span class="ot">-&gt;</span> <span class="op">*</span>) <span class="kw">where</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">data</span> <span class="dt">State</span> f</span></code></pre></div>
+<p>So every data source with request type <code>req</code> defines a state of type
+<code>State req</code>, which can of course be empty if the data source doesn’t
+need any state. Our blog data source defines it like this:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> <span class="dt">StateKey</span> <span class="dt">BlogRequest</span> <span class="kw">where</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">data</span> <span class="dt">State</span> <span class="dt">BlogRequest</span> <span class="ot">=</span> <span class="dt">BlogDataState</span> <span class="dt">SQLiteHandle</span></span></code></pre></div>
+<p>The <code>State req</code> for a data source is passed to <code>fetch</code> each time it is
+called.</p>
 <p>The full implementation of our example data source is in <a href="https://github.com/simonmar/haskell-eXchange-2015/blob/3ae0e34a051201eb77721bee2e940ec1f764a0df/BlogDataSource.hs">BlogDataSource.hs</a>.</p>
 <h2 id="how-do-we-run-some-haxl">How do we run some Haxl?</h2>
 <p>There’s a <code>runHaxl</code> function:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">runHaxl ::</span> <span class="dt">Env</span> u <span class="ot">-&gt;</span> <span class="dt">GenHaxl</span> u a <span class="ot">-&gt;</span> <span class="dt">IO</span> a</code></pre></div>
-<p>Which needs something of type <code>Env u</code>. This is the “environment” that a Haxl computation runs in, and contains various things needed by the framework. It also contains the data source state, and to build an <code>Env</code> we need to supply the initial state. Here’s how to get an <code>Env</code>:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">initEnv ::</span> <span class="dt">StateStore</span> <span class="ot">-&gt;</span> u <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Env</span> u)</code></pre></div>
-<p>The <code>StateStore</code> contains the states for all the data sources we’re using. It is constructed with these two functions:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">stateEmpty ::</span> <span class="dt">StateStore</span>
-<span class="ot">stateSet ::</span> <span class="dt">StateKey</span> f <span class="ot">=&gt;</span> <span class="dt">State</span> f <span class="ot">-&gt;</span> <span class="dt">StateStore</span> <span class="ot">-&gt;</span> <span class="dt">StateStore</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="ot">runHaxl ::</span> <span class="dt">Env</span> u <span class="ot">-&gt;</span> <span class="dt">GenHaxl</span> u a <span class="ot">-&gt;</span> <span class="dt">IO</span> a</span></code></pre></div>
+<p>Which needs something of type <code>Env u</code>. This is the “environment” that
+a Haxl computation runs in, and contains various things needed by the
+framework. It also contains the data source state, and to build an
+<code>Env</code> we need to supply the initial state. Here’s how to get an <code>Env</code>:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="ot">initEnv ::</span> <span class="dt">StateStore</span> <span class="ot">-&gt;</span> u <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Env</span> u)</span></code></pre></div>
+<p>The <code>StateStore</code> contains the states for all the data sources we’re
+using. It is constructed with these two functions:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="ot">stateEmpty ::</span> <span class="dt">StateStore</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="ot">stateSet ::</span> <span class="dt">StateKey</span> f <span class="ot">=&gt;</span> <span class="dt">State</span> f <span class="ot">-&gt;</span> <span class="dt">StateStore</span> <span class="ot">-&gt;</span> <span class="dt">StateStore</span></span></code></pre></div>
 <p>To see how to put these together, take a look at <a href="https://github.com/simonmar/haskell-eXchange-2015/blob/3ae0e34a051201eb77721bee2e940ec1f764a0df/HaxlBlog.hs">HaxlBlog.hs</a>.</p>
 <h2 id="trying-it-out">Trying it out</h2>
-<p>We saw a small example of our Haxl data source working earlier, but just to round off this first part of the series and whet your appetite for the next part, here are a couple more examples.</p>
+<p>We saw a small example of our Haxl data source working earlier, but
+just to round off this first part of the series and whet your appetite
+for the next part, here are a couple more examples.</p>
 <p>Haxl batches things together when we use the <code>Applicative</code> operators:</p>
 <pre><code>*HaxlBlog&gt; run $ (,) &lt;$&gt; getPostContent 1 &lt;*&gt; getPostContent 2
 select postid,content from postcontent where postid in (2,1)
@@ -276,7 +371,9 @@ select postid,content from postcontent where postid in (2,1)
 <pre><code>*HaxlBlog&gt; run $ (,) &lt;$&gt; mapM getPostContent [1..3] &lt;*&gt; mapM getPostContent [4..6]
 select postid,content from postcontent where postid in (6,5,4,3,2,1)
 ([&quot;example content 1&quot;,&quot;example content 2&quot;,&quot;example content 3&quot;],[&quot;example content 4&quot;,&quot;example content 5&quot;,&quot;example content 6&quot;])</code></pre>
-<p>In Part 2 we’ll talk more about batching, and introduce the upcoming <code>ApplicativeDo</code> extension which will allow Haxl to automatically parallelize sequential-looking <code>do</code>-expressions.</p>
+<p>In Part 2 we’ll talk more about batching, and introduce the upcoming
+<code>ApplicativeDo</code> extension which will allow Haxl to automatically
+parallelize sequential-looking <code>do</code>-expressions.</p>
 </div>
 
       </div>
