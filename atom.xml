@@ -10,8 +10,120 @@
         <email>marlowsd@gmail.com</email>
         
     </author>
-    <updated>2025-05-22T00:00:00Z</updated>
+    <updated>2025-06-11T00:00:00Z</updated>
     <entry>
+    <title>Browsing Stackage with VS Code and Glean</title>
+    <link href="https://simonmar.github.io/posts/2025-06-11-Glean-stackage-vscode.html" />
+    <id>https://simonmar.github.io/posts/2025-06-11-Glean-stackage-vscode.html</id>
+    <published>2025-06-11T00:00:00Z</published>
+    <updated>2025-06-11T00:00:00Z</updated>
+    <summary type="html"><![CDATA[<div class="post">
+  <h1 class="post-title">Browsing Stackage with VS Code and Glean</h1>
+  <span class="post-date">June 11, 2025</span>
+  <p>Have you ever wished you could browse all the Haskell packages
+together in your IDE, with full navigation using go-to-definition
+and find-references? Here’s a demo of something I hacked together
+while at <a href="https://zfoh.ch/zurihac2025/">ZuriHac 2025</a> over the weekend:</p>
+<p><video src="/images/vscode-stackage-glean.webm" controls=""><a href="/images/vscode-stackage-glean.webm">Video</a></video></p>
+<p>In the <a href="2025-05-22-Glean-Haskell.html">previous post</a> I talked about
+how to index all of Hackage (actually Stackage, strictly speaking,
+because it’s not in general possible to build all of Hackage together)
+using <a href="https://glean.software">Glean</a>. Since that post I made some
+more progress on the indexer:</p>
+<ul>
+<li><p>The indexer now <a href="https://github.com/facebookincubator/Glean/pull/532">indexes
+types</a>. You can
+see type-on-hover working in the demo. The types are similar to what
+you see in the Haddock-generated hyperlinked source, except that
+here it’s always using the type of the definition and not the type
+at the usage site, which might be more specific. That’s a TODO for
+later.</p></li>
+<li><p>Fixed a bunch of things, enriched the index with details about
+constructors, fields and class methods, and made indexing more
+efficient.</p></li>
+</ul>
+<p>The DB size including types is now about <strong>1GB</strong>, and it takes <strong>just
+under 10 minutes</strong> on my 9-year-old laptop to index the nearly 3000
+packages in my stackage LTS 21.21 snapshot.</p>
+<h2 id="hooking-it-up-to-vs-code">Hooking it up to VS Code</h2>
+<p>The architecture looks like this:</p>
+<p><img src="/images/vscode-glean-arch.svg" /></p>
+<p>The LSP server is a modified version of
+<a href="https://github.com/josephsumabat/static-ls">static-ls</a>, which is
+already designed to provide an LSP service based on static
+information. I just reimplemented a few of its handlers to make calls
+to Glass instead of the existing hie/hiedb implementations. You can
+see the changes on <a href="https://github.com/simonmar/static-ls/commits/glean/">my fork of
+static-ls</a>. Of
+course, these changes are still quite hacky and not suitable for
+upstreaming.</p>
+<p><a href="https://github.com/facebookincubator/Glean/tree/main/glean/glass">Glass</a>
+is a “Language-agnostic Symbol Server”. Essentially it provides an API
+abstraction over Glean with operations that are useful for code
+navigation and search.</p>
+<h2 id="where-to-next">Where to next?</h2>
+<p>There remain a few issues to solve before this can be useful.</p>
+<ul>
+<li><p><strong>Make Glean more easily installable.</strong> There’s a general concensus that
+<code>cabal install glean</code> would lower the barrier to entry
+significantly; in order to do this we need to build the folly
+dependency using Cabal.</p></li>
+<li><p><strong>Clean up and ship the LSP server, somehow.</strong> Once Glean is
+cabal-installable, we can depend on it from an LSP server package.</p></li>
+<li><p><strong>Think about continuous integration to build the Glean
+DB</strong>. Perhaps this can piggyback off the stackage CI infra? If we
+can already build a complete stackage snapshot, and Glean is
+easily installable, then indexing would be fairly
+straightforward. I’d love to hear suggestions on how best to do
+this.</p></li>
+</ul>
+<p>And looking forwards a bit further:</p>
+<ul>
+<li><p><strong>Think about how to handle multiple packages versions.</strong> There’s no
+fundamental problem with indexing multiple package versions, except
+that Glass’s SymbolID format currently doesn’t include the package
+version but that’s easily fixable. We could for example build
+multiple stackage LTS instances and index them all in a single Glean
+DB. There would be advantages to doing this, if for instance there
+were packages in common between two Stackage instances then the
+Glean DB would only contain a single copy. A lot of the type
+structure would be shared too.</p></li>
+<li><p><strong>Provide search functionality in the LSP.</strong> Glean can provide
+simple textual search for names, and with some work could also
+provide Hoogle-like type search.</p></li>
+<li><p><strong>Think about how to index local projects and local changes</strong>. Glean
+supports <em>stacked</em> and
+<a href="https://glean.software/blog/incremental/"><em>incremental</em></a> DBs, so we
+could build a DB for a local project stacked on top of the full
+Stackage DB. You would be able to go-to-definition directly from
+a file in your project to the packages it depends on in
+Stackage. We could re-index new <code>.hie</code> files as they are
+generated, rather like how static-ls currently handles changes.</p></li>
+<li><p><strong>Integrate with HLS?</strong> Perhaps Glean could be used to handle
+references outside of the current project, switching seamlessly
+from GHC-based navigation to Glean-based navigation if you jump
+into a non-local package.</p></li>
+</ul>
+<h2 id="more-use-cases">More use cases?</h2>
+<p>I talked with a few people at ZuriHac about potential use cases for
+Glean within the Haskell ecosystem. Using it in <code>haskell.org</code> came up
+a few times, as a way to power search, navigation and analysis. Also
+mentioned was the possibility of using it as a Hoogle
+backend. Potentially we could replace the Haddock-generated
+hyperlinked sources on <code>haskell.org</code> with a Glean-based browser, which
+would allow navigating links between packages and find-references.</p>
+<p>Another use cases that came up was the possibility of doing impact
+analysis for core library changes (or any API changes really). Some of
+this is already possible using find-references, but more complex cases
+such as finding instances that override certain methods aren’t
+possible yet until we extend the indexer to capture richer
+information.</p>
+<p>If you’re interested in using Glean for something, why not jump on the
+<a href="https://discord.com/channels/280033776820813825/505370075402862594/808027763868827659">Glean discord server</a> and tell us about it!</p>
+</div>
+]]></summary>
+</entry>
+<entry>
     <title>Indexing Hackage: Glean vs. hiedb</title>
     <link href="https://simonmar.github.io/posts/2025-05-22-Glean-Haskell.html" />
     <id>https://simonmar.github.io/posts/2025-05-22-Glean-Haskell.html</id>
@@ -1818,248 +1930,6 @@ select postid,content from postcontent where postid in (6,5,4,3,2,1)
 <p>In Part 2 we’ll talk more about batching, and introduce the upcoming
 <code>ApplicativeDo</code> extension which will allow Haxl to automatically
 parallelize sequential-looking <code>do</code>-expressions.</p>
-</div>
-]]></summary>
-</entry>
-<entry>
-    <title>Optimising Garbage Collection Overhead in Sigma</title>
-    <link href="https://simonmar.github.io/posts/2015-07-28-optimising-garbage-collection-overhead-in-sigma.html" />
-    <id>https://simonmar.github.io/posts/2015-07-28-optimising-garbage-collection-overhead-in-sigma.html</id>
-    <published>2015-07-28T00:00:00Z</published>
-    <updated>2015-07-28T00:00:00Z</updated>
-    <summary type="html"><![CDATA[<div class="post">
-  <h1 class="post-title">Optimising Garbage Collection Overhead in Sigma</h1>
-  <span class="post-date">July 28, 2015</span>
-  <h2 id="background">Background</h2>
-<p>I work with a team at Facebook on <a
-href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">Sigma</a>, which is part of the anti-spam infrastructure. Sigma
-runs Haskell code, using the <a
-href="https://github.com/facebook/Haxl">Haxl</a> framework.</p>
-<p>I plan to use this blog to post about things that our team is doing
-that relate to Haskell and might be of interest to the wider Haskell
-community. When I say “we” in what follows, I’m referring to the team
-that works on Haxl and Sigma at Facebook.</p>
-<h2 id="profiling-the-gc">Profiling the GC</h2>
-<p>Last week I decided to dig into how the Haskell GC was performing in
-Sigma. Up until now we’ve been mostly focusing on performance of the
-Haskell code, because reducing allocation pressure by optimising the
-Haskell code has direct benefits in reducing GC overhead. We had made
-a couple of improvements to the GC itself (<a
-href="https://phabricator.haskell.org/D318">here</a> and <a
-href="https://phabricator.haskell.org/rGHC452eb80f15fce8665df52bc9facebfafb5b6267b">here</a>)
-earlier, but until now we hadn’t done a thorough investigation into
-how the GC was behaving.</p>
-<p>It turns out there was some low-hanging fruit, and I managed to <strong>cut
-the GC overhead roughly in half</strong> for our production workload with a
-handful of fixes (by me and others). This is performance for
-free—the Haskell code remains the same, but running it consumes less
-time and electricity.</p>
-<h2 id="goals">Goals</h2>
-<p>A couple of things prompted this investigation:</p>
-<ol type="1">
-<li><p>Sigma runs on different types of machines, with different numbers of
-cores. On machines with more cores, we were seeing longer GC pause
-times.</p></li>
-<li><p>A no-brainer way to reduce GC overhead is to give the GC more
-memory. Every time the GC runs, it has to traverse all the live
-data, so it follows that running the GC half as often should yield
-half the overhead. Running the GC half as often requires twice as
-much memory. Unfortunately I found that while this works to some
-extent, using more memory unexpectedly also resulted in longer pause
-times.</p></li>
-</ol>
-<p>Longer pause times are a problem when you care about latency, so this
-artificially constrains the amount of memory Sigma can use while staying
-within its latency requirements.</p>
-<p>There are a couple of solutions to this problem I’m going to ignore
-for now:</p>
-<ol start="3" type="1">
-<li><p>GC architecture that is designed to reduce pause times, such as
-concurrent or incremental GC. Indeed I worked on <a
-  href="http://community.haskell.org/~simonmar/papers/local-gc.pdf">a
-partially-concurrent GC</a> for GHC, but it currently isn’t part of
-GHC for various reasons (too complicated, moves overheads to other
-places, etc.). In the future I’d like to return to this, but for
-now let’s ignore alternative GC architecture and see what can be done
-with the existing stop-the-world parallel GC.</p></li>
-<li><p>There are load-balancing tricks that could be used to avoid sending
-requests to machines about to GC. This could be important if your
-latency requirements are tighter than typical GC pause times would
-allow, but at least in our case there is enough headroom that we
-don’t need to worry about this. So again, let’s ignore
-load-balancing tricks and just worry about how to reduce pause
-times.</p></li>
-</ol>
-<h2 id="start-with-a-threadscope-profile">Start with a ThreadScope profile</h2>
-<p>The first thing I did was to break out <a
-href="https://wiki.haskell.org/ThreadScope">ThreadScope</a> and
-visualize a Sigma process running flat out (note that running flat out
-is rare in practice, because traffic isn’t constant, and it’s
-important to have spare capacity just in case).</p>
-<p>ThreadScope immediately threw up a few interesting things to
-investigate. First, it looks like some of the cores are only partially active:</p>
-<p><img src="/images/threadscope1.png" /></p>
-<p>This is only showing activity in Haskell, not in C++, so it doesn’t
-necessarily mean the machine wasn’t busy during those times. However,
-it could also be that GHC’s scheduler isn’t doing a great job of
-balancing the load. That definitely deserves investigation, but I’m
-primarily interested in what the GC is doing, so let’s come back to
-that later (in a future post, perhaps).</p>
-<h2 id="right-off-the-bat-a-bug-in-gc-synchronisation">Right off the bat: a bug in GC synchronisation</h2>
-<p>Let’s look at a typical GC:</p>
-<p><img src="/images/threadscope2.png" /></p>
-<p>When a GC is required, all the cores stop running Haskell code and
-report for GC duties. When they stop, they have to synchronise. In
-the above profile a few cores appear to “stutter” a
-bit before stopping. This turned out to be a <a
-href="https://phabricator.haskell.org/rGHC75fd5dc204fb6bb9014f6bba4d680facbc952faf">bug
-in the scheduler</a> that was a bit tricky to track down, but wasn’t
-hard to fix. It won’t affect most people using GHC because it only
-happens when using the “nursery chunks” feature we added earlier.</p>
-<h2 id="gc-phases">GC phases</h2>
-<p>There are a few phases in a GC. ThreadScope doesn’t show them all
-visually, but they can be identified from the raw event log data:</p>
-<ol type="1">
-<li><p>Synchronisation: as described above. We know from monitoring that
-this typically takes about 1ms, so compared to our overall GC pause
-time it’s not significant. Incidentally, to get the sync time down to
-a sensible value we had to do a lot of work to identify FFI calls that
-should be marked “safe” rather than “unsafe”.</p></li>
-<li><p>Init: one thread sets up the GC data structures ready for GC</p></li>
-<li><p>Trace: all the threads trace the live data and copy it</p></li>
-<li><p>Cleanup: one thread tidies up the GC data structures and releases
-memory.</p></li>
-</ol>
-<p>Trace is the biggest phase, as expected (I’ll come back to that
-later). But Init and Cleanup are both single-threaded phases, so it’s
-especially important to keep these phases short. Looking at the
-ThreadScope profile, it looks like the Init phase is about 5ms, while
-Cleanup is regularly 20ms or greater - now <em>that</em> is surprising, I’d
-really like to know where that 20ms is going.</p>
-<p>Next I instrumented the Cleanup phase to narrow down where the time is
-going. I found that:</p>
-<ol type="1">
-<li><p>Between 1-10ms is spent releasing memory for large objects. This
-is surprising, and goes some way to explaining why larger heap sizes
-result in longer pause times. Needs more investigation (in a later
-post).</p></li>
-<li><p>20ms is spent in <code>zero_static_object_list()</code>, I’ll come back to
-this later.</p></li>
-<li><p>5ms is spent finalizing objects. Wow! I didn’t realise there was
-anything that needed finalizing at all.</p></li>
-</ol>
-<h2 id="saving-5ms-per-gc-by-not-using-foreignptr">Saving 5ms per GC by not using <code>ForeignPtr</code></h2>
-<p>With a bit more instrumentation (which is a fancy name for <code>printf</code>),
-I discovered that each GC was finalizing around 20,000 weak pointers.
-A weak pointer is created by <code>newForeignPtr</code> in Haskell - it’s a
-pointer to a data structure outside the Haskell heap that needs to be
-finalized when it becomes garbage. These things are quite
-heavyweight, due to the extra work the GC needs to do to track them.</p>
-<p>It took me a little while to find exactly what was creating these
-<code>ForeignPtr</code>s, but eventually I tracked it down to the <code>regex-pcre</code>
-package. Some of our Haskell code uses regular expressions, and
-compiling a regex using <code>regex-pcre</code> creates a <code>ForeignPtr</code>.</p>
-<p>This is perfectly reasonable when the library doesn’t know the
-lifetime of the regex, and it’s typically a good idea to compile a
-regex once and use it many times. But the places that were using
-regexes, the regex was compiled once and then discarded.</p>
-<p>It was simple enough to change the <code>regex-pcre</code> to expose a
-<code>withRegex</code> function that used scoped allocation rather than
-<code>ForeignPtr</code>, and then use this. This removed all the <code>ForeignPtr</code>s
-and saved 5ms per GC.</p>
-<h2 id="saving-20ms-per-gc-by-optimising-static-object-handling">Saving 20ms per GC by optimising static object handling</h2>
-<p>The next thing to look at was <code>zero_static_object_list()</code>. The story
-behind this is a bit involved. In Haskell we can have top-level lazy
-definitions; when you write something like this</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ot">x ::</span> <span class="dt">HashMap</span> <span class="dt">Text</span> <span class="dt">Int</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>x <span class="ot">=</span> HashMap.fromList [ (<span class="st">&quot;a&quot;</span>,<span class="dv">1</span>), (<span class="st">&quot;b&quot;</span>,<span class="dv">2</span>), <span class="op">...</span> ]</span></code></pre></div>
-<p><code>x</code> is a top-level definition that is computed when it is first used.
-This is called a CAF (Constant Applicative Form).</p>
-<p>Now, the garbage collector needs to know about all the CAFs, because
-they are roots into the heap. However, it is important to
-garbage-collect a CAF that is no longer needed, because it might be
-holding onto a lot of data in the heap. But to tell when <code>x</code> is no
-longer needed, the GC needs to follow references from <em>code</em>, not just
-<em>data</em>. So that’s what the GC does - there’s an abstraction of the
-references from code, called an SRT (Static Reference Table), and the
-GC traces all the CAFs reachable from the SRTs during every major GC.</p>
-<p>During this process, the GC links all the static objects, like <code>x</code>,
-together on a list, so it can tell which ones it has seen so far. The
-list is chained through the objects themselves - each one has a link
-field that starts NULL and points to the next object on the list when
-it has been visited. After GC, the fields must be reset to NULL
-again, which is what <code>zero_static_object_list()</code> is doing. In Sigma
-there is a lot of code, so this was taking 20ms.</p>
-<p>The trick to avoid this is instead of using NULL to indicate an object
-that the GC hasn’t seen yet, use a flag that flips between two states.
-I use the values 1 and 2, and store these in the low 2 bits of the
-pointer in the object’s link field. Each GC flips the flag value to
-the other state and stores it in each object it visits. If the GC
-meets an object with the other flag value, we know we haven’t seen it
-during this GC cycle. The scheme is made a little more complicated by
-two other things: there might be objects that appear that we have never
-seen before (due to runtime linking), and there might be objects that
-are unconditionally alive for other reasons (which is what the values
-0 and 3 are reserved for).</p>
-<p>Here’s the <a href="https://phabricator.haskell.org/D1076">patch</a>.
-At the time of writing, I had to back it out because it
-introduced a performance regression in one benchmark, and some <a
-href="https://ghc.haskell.org/trac/ghc/ticket/10685">test failures</a>
-in a certain build configuration. I’ll investigate those and get the
-patch back in as soon as possible.</p>
-<h2 id="avoiding-contention-by-optimising-heap_alloced">Avoiding contention by optimising <code>HEAP_ALLOCED()</code></h2>
-<p>ThreadScope doesn’t give an indication of where in the code the time
-is being spent, so I also took a look at the output from the Linux
-<code>perf</code> tool for our running process.</p>
-<p>It showed that the process was spending a lot of time in <code>evacuate</code>,
-which is not surprising - that’s the routine in the GC that copies
-objects. However, when I drilled down into <code>evacuate</code> in <code>perf report</code> and annotated the assembly, this is what I saw:</p>
-<p><img src="/images/perf.png" /></p>
-<p>The majority of the time is spent in a spinlock. Furthermore, it
-tells which one: this is part of the implementation of a function
-called <code>HEAP_ALLOCED()</code>.</p>
-<p>A bit of background is in order. GHC allocates memory from the
-operating system in units of aligned megabytes. So it owns a
-collection of megabytes that might be anywhere in the address space.
-For every pointer it sees, the GC asks the question “is this a pointer
-into the heap?”, and the memory manager should return true for any of
-the memory that GHC has allocated, and false otherwise. This is the
-job of the <code>HEAP_ALLOCED()</code> macro.</p>
-<p>On a 32-bit machine, answering the question is easy: a megabyte is 20
-bits, so we only need a 12-bit lookup table, and even using a full
-byte for each entry, that’s just 4KB.</p>
-<p>On a 64-bit machine, it’s much harder. Even taking advantage of
-the fact that only 48 bits are available address space on x86_64
-architecture machines, that still leaves 28 bits, which is a 256MB
-table (32MB using bits instead of bytes). This is not likely to
-be an acceptable memory overhead.</p>
-<p>So the existing implementation of <code>HEAP_ALLOCED()</code> for 64-bit machines
-<a
-href="https://phabricator.haskell.org/diffusion/GHC/browse/master/rts/sm/HeapAlloc.h;6e618d77d64255c32bef543a3f9635abce24a66d$71-113">used
-a cache</a>. The fallback path for a cache miss needs to consult the actual memory mapping, which requires a lock.</p>
-<p>In our application, which has quite large memory requirements and uses
-a lot of cores, there were a lot of cache misses, and contention for
-this lock was extremely high.</p>
-<p>Fortunately, a solution to this problem had been sitting around for a
-while, in the form of the <a
-href="https://phabricator.haskell.org/D524">two-step allocator</a>
-(the patch is by Giovanni Campagna, with a few updates by me).
-Instead of allocating memory randomly around the address space, the runtime
-reserves a large chunk of address space up front, and then allocates
-memory within that chunk. This works on certain OSs - Linux and OS X, but
-not Windows, <a href="https://phabricator.haskell.org/D524#29391">it
-turns out</a>.</p>
-<p>Bringing in this patch made a huge difference to GC performance,
-although it’s difficult to get an accurate measure of how much,
-because the amount of contention for the lock in the old code depended
-on the random location of memory in the address space. In total the
-patches mentioned so far approximately halved GC overhead for our
-workload.</p>
-<h2 id="loose-ends">Loose ends</h2>
-<p>There were a couple of loose ends to chase up from the ThreadScope
-profile: possible scheduler suboptimality, and time spent freeing
-large objects. I plan to look into those later, there may well be
-further improvements to be had. Until next time!</p>
 </div>
 ]]></summary>
 </entry>
