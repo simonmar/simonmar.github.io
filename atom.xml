@@ -42,9 +42,10 @@ later.</p></li>
 constructors, fields and class methods, and made indexing more
 efficient.</p></li>
 </ul>
-<p>The DB size including types is now about <strong>1GB</strong>, and it takes <strong>just
-under 10 minutes</strong> on my 9-year-old laptop to index the nearly 3000
-packages in my stackage LTS 21.21 snapshot.</p>
+<p>The DB size including types is now about <strong>850MB</strong>, and it takes
+<strong>just under 8 minutes</strong> on my 9-year-old laptop to index the nearly
+3000 packages in my stackage LTS 21.21 snapshot. (Note: the figures
+here were updated on 12-06-2025 when I redid the measurments).</p>
 <h2 id="hooking-it-up-to-vs-code">Hooking it up to VS Code</h2>
 <p>The architecture looks like this:</p>
 <p><img src="/images/vscode-glean-arch.svg" /></p>
